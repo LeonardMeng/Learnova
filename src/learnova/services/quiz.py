@@ -1,6 +1,10 @@
 """Quiz: draw knowledge points by weight (across all workspaces unless one is named), have the
-model write a short-answer question from the notes, grade the answer against the rubric in
-docs/grading-rubric.md, and record the attempt, which rebuilds the point's mastery.
+model write a question from the notes, grade the answer, and record the attempt, which rebuilds
+the point's mastery.
+
+Short answers are graded by the model against docs/grading-rubric.md. Multiple choice and
+true/false questions are graded here, with no model call: the model only writes the question,
+the options and the correct answer.
 
 Writing questions and grading are passed in as functions, so tests can replace them with fakes.
 The interactive part (asking and reading answers) lives in the CLI."""
@@ -8,6 +12,7 @@ The interactive part (asking and reading answers) lives in the CLI."""
 from __future__ import annotations
 
 import random
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -36,6 +41,19 @@ class QuizError(Exception):
 
 class GeneratedQuestion(BaseModel):
     question: str
+
+
+class MCQuestion(BaseModel):
+    question: str
+    options: list[str]
+    correct_index: int  # 0–3
+    explanation: str
+
+
+class TFStatement(BaseModel):
+    statement: str
+    is_true: bool
+    explanation: str
 
 
 class Grade(BaseModel):
@@ -77,8 +95,41 @@ class GradeRequest:
     answer: str
 
 
+@dataclass(frozen=True)
+class ChoiceQuestion:
+    """A multiple-choice or true/false question, ready to show and to grade locally."""
+
+    type: QuestionType  # MULTIPLE_CHOICE or TRUE_FALSE
+    text: str  # the question, or the statement to judge
+    options: list[str]  # in the order shown; ["True", "False"] for true/false
+    correct: int  # index into options
+    explanation: str
+
+    def data(self, chosen: int) -> dict:
+        """What is stored with the attempt."""
+        if self.type == QuestionType.TRUE_FALSE:
+            return {
+                "is_true": self.correct == 0,
+                "chosen": self.options[chosen].lower() == "true",
+                "explanation": self.explanation,
+            }
+        return {
+            "options": self.options,
+            "correct": self.correct,
+            "chosen": chosen,
+            "explanation": self.explanation,
+        }
+
+
+class InvalidQuestion(Exception):
+    """The model's question didn't pass the checks, even after a retry."""
+
+
 Questioner = Callable[[QuestionRequest], str]
+ChoiceQuestioner = Callable[[QuestionRequest], ChoiceQuestion]
 Grader = Callable[[GradeRequest], Grade]
+
+LETTERS = "ABCD"
 
 
 # --- drawing -------------------------------------------------------------------------------
@@ -173,7 +224,94 @@ def record(
         grade.score,
         feedback,
         now,
-        lambda pairs: replay(pairs, config),
+        lambda attempts: replay(attempts, config),
+    )
+
+
+# --- multiple choice and true/false ----------------------------------------------------------
+
+_LABEL = re.compile(r"^\s*(?:[A-Da-d]|[1-4])\s*[).:\-]\s+")
+
+
+def checked_mc(raw: MCQuestion, rng: random.Random) -> ChoiceQuestion:
+    """Validate the model's question and shuffle its options (models favour one position)."""
+    options = [_LABEL.sub("", o).strip() for o in raw.options]
+    if len(options) != 4 or any(not o for o in options):
+        raise InvalidQuestion("needs exactly 4 non-empty options")
+    if len({o.casefold() for o in options}) != 4:
+        raise InvalidQuestion("options must all be different")
+    if not 0 <= raw.correct_index < 4:
+        raise InvalidQuestion(f"correct_index {raw.correct_index} is not 0–3")
+    if not raw.question.strip():
+        raise InvalidQuestion("empty question")
+    order = list(range(4))
+    rng.shuffle(order)
+    return ChoiceQuestion(
+        type=QuestionType.MULTIPLE_CHOICE,
+        text=raw.question.strip(),
+        options=[options[i] for i in order],
+        correct=order.index(raw.correct_index),
+        explanation=raw.explanation.strip(),
+    )
+
+
+def checked_tf(raw: TFStatement) -> ChoiceQuestion:
+    if not raw.statement.strip():
+        raise InvalidQuestion("empty statement")
+    return ChoiceQuestion(
+        type=QuestionType.TRUE_FALSE,
+        text=raw.statement.strip(),
+        options=["True", "False"],
+        correct=0 if raw.is_true else 1,
+        explanation=raw.explanation.strip(),
+    )
+
+
+def parse_choice(question: ChoiceQuestion, text: str) -> int | None:
+    """The option index the user picked, or None if the input isn't a valid choice."""
+    t = text.strip().lower()
+    if question.type == QuestionType.TRUE_FALSE:
+        return {"t": 0, "true": 0, "y": 0, "yes": 0, "f": 1, "false": 1, "n": 1, "no": 1}.get(t)
+    if len(t) == 1 and t.upper() in LETTERS:
+        return LETTERS.index(t.upper())
+    if t in {"1", "2", "3", "4"}:
+        return int(t) - 1
+    return None
+
+
+def grade_choice(question: ChoiceQuestion, chosen: int) -> float:
+    """Local grading: right is 5, wrong is 0."""
+    return 5.0 if chosen == question.correct else 0.0
+
+
+def record_choice(
+    repos: Repositories,
+    item: QuizItem,
+    question: ChoiceQuestion,
+    chosen: int,
+    now: datetime,
+    config: MasteryConfig,
+) -> tuple[Attempt, Mastery]:
+    user = repos.users.get_or_create_local()
+    shown = question.text
+    if question.type == QuestionType.MULTIPLE_CHOICE:
+        shown += "\n" + "\n".join(f"{LETTERS[i]}) {o}" for i, o in enumerate(question.options))
+    answer = (
+        question.options[chosen]
+        if question.type == QuestionType.TRUE_FALSE
+        else f"{LETTERS[chosen]}) {question.options[chosen]}"
+    )
+    return repos.attempts.record(
+        user.id,
+        item.point.id,
+        shown,
+        question.type,
+        answer,
+        grade_choice(question, chosen),
+        question.explanation,
+        now,
+        lambda attempts: replay(attempts, config),
+        question_data=question.data(chosen),
     )
 
 
@@ -209,6 +347,49 @@ def llm_questioner(model) -> Questioner:
             notes=_notes_block(req.notes),
         )
         return factory.ask_structured(model, GeneratedQuestion, prompt).question.strip()
+
+    return ask
+
+
+def _with_retry(make):
+    """Ask the model again once if its question fails the checks."""
+    try:
+        return make()
+    except InvalidQuestion:
+        try:
+            return make()
+        except InvalidQuestion as e:
+            raise InvalidQuestion(f"the model's question was invalid twice ({e})") from None
+
+
+def llm_mc_questioner(model, rng: random.Random) -> ChoiceQuestioner:
+    def ask(req: QuestionRequest) -> ChoiceQuestion:
+        prompt = prompts.load("question_mc").format(
+            point_name=req.point.name,
+            point_summary=req.point.summary,
+            notes=_notes_block(req.notes),
+        )
+        return _with_retry(
+            lambda: checked_mc(factory.ask_structured(model, MCQuestion, prompt), rng)
+        )
+
+    return ask
+
+
+def llm_tf_questioner(model, rng: random.Random) -> ChoiceQuestioner:
+    def ask(req: QuestionRequest) -> ChoiceQuestion:
+        # Learnova picks true or false 50/50; left alone, models write mostly true statements.
+        want_true = rng.random() < 0.5
+        prompt = prompts.load("question_tf").format(
+            point_name=req.point.name,
+            point_summary=req.point.summary,
+            notes=_notes_block(req.notes),
+            truth="TRUE" if want_true else "FALSE",
+            false_hint=""
+            if want_true
+            else " Make it plausible: change one important detail of something the notes say.",
+        )
+        return _with_retry(lambda: checked_tf(factory.ask_structured(model, TFStatement, prompt)))
 
     return ask
 

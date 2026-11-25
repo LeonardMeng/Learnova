@@ -137,6 +137,8 @@ class Attempt(BaseModel):
     score: float  # 0–5, one decimal
     feedback: str
     created_at: datetime
+    # Multiple choice / true-false: what was shown, the right answer and the choice made.
+    question_data: dict | None = None
 
 
 class Mastery(BaseModel):

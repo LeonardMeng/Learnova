@@ -132,9 +132,9 @@ class PointNotFound(LookupError):
     pass
 
 
-# Turns (time, score) pairs into a mastery state, e.g. scheduler.mastery.replay with the user's
-# settings. Passed in so the repositories don't need to know the mastery rule or its settings.
-MasteryFn = Callable[[list[tuple[datetime, float]]], MasteryState]
+# Turns (time, score, question type) triples into a mastery state, e.g. scheduler.mastery.replay
+# with the user's settings. Passed in so the repositories don't need to know the mastery rule.
+MasteryFn = Callable[[list[tuple[datetime, float, str]]], MasteryState]
 
 
 class KnowledgeRepository(ABC):
@@ -191,6 +191,7 @@ class AttemptRepository(ABC):
         feedback: str,
         created_at: datetime,
         mastery_from: MasteryFn,
+        question_data: dict | None = None,
     ) -> tuple[Attempt, Mastery]:
         """Save the attempt and rebuild the point's mastery, in one transaction."""
 

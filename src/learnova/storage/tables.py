@@ -154,6 +154,8 @@ class AttemptRow(Base):
     score: Mapped[float] = mapped_column(Float)  # 0–5, one decimal
     feedback: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    # Options shown, correct answer and choice, for multiple choice and true/false.
+    question_data: Mapped[dict | None] = mapped_column(JSON)
 
 
 class MasteryRow(Base):

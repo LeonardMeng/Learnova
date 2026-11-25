@@ -1,7 +1,9 @@
 # Grading rubric
 
-Learnova grades every quiz answer on a 0–5 scale with one decimal place. The grading prompt loads
-this file each time it grades an answer, so editing this file changes grading directly. Keep the
+Learnova grades every short-answer quiz answer on a 0–5 scale with one decimal place. The grading
+prompt loads this file each time it grades an answer, so editing this file changes grading
+directly. Multiple-choice and true/false answers don't use this rubric: they are checked locally
+and score 5 if right, 0 if wrong. Keep the
 level headings (`## 0` to `## 5`); the descriptions and examples can be changed freely.
 
 ## How a score is given

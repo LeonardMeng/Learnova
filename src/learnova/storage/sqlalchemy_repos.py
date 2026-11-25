@@ -431,6 +431,7 @@ def _attempt(row: AttemptRow) -> Attempt:
         score=row.score,
         feedback=row.feedback,
         created_at=row.created_at,
+        question_data=row.question_data,
     )
 
 
@@ -445,17 +446,20 @@ def _mastery(row: MasteryRow) -> Mastery:
 
 def _rebuild_mastery(s: Session, user_id, point_id, mastery_from: MasteryFn) -> MasteryRow | None:
     """Replay all of the point's attempts into its mastery row (inside the caller's transaction)."""
-    pairs = list(
-        s.execute(
-            select(AttemptRow.created_at, AttemptRow.score).where(AttemptRow.point_id == point_id)
+    triples = [
+        (when, score, qtype)
+        for when, score, qtype in s.execute(
+            select(AttemptRow.created_at, AttemptRow.score, AttemptRow.question_type).where(
+                AttemptRow.point_id == point_id
+            )
         )
-    )
+    ]
     row = s.get(MasteryRow, point_id)
-    if not pairs:
+    if not triples:
         if row is not None:
             s.delete(row)
         return None
-    state = mastery_from([(when, score) for when, score in pairs])
+    state = mastery_from(triples)
     if row is None:
         row = MasteryRow(point_id=point_id, user_id=user_id)
         s.add(row)
@@ -483,6 +487,7 @@ class SqlAttemptRepository(AttemptRepository):
         feedback,
         created_at,
         mastery_from: MasteryFn,
+        question_data=None,
     ) -> tuple[Attempt, Mastery]:
         with self._sessions.begin() as s:
             row = AttemptRow(
@@ -494,6 +499,7 @@ class SqlAttemptRepository(AttemptRepository):
                 score=score,
                 feedback=feedback,
                 created_at=created_at,
+                question_data=question_data,
             )
             s.add(row)
             s.flush()

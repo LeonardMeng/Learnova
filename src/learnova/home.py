@@ -36,8 +36,14 @@ DEFAULT_CONFIG = """\
 # new_point_days = 7     # "days since last review" for a point never quizzed
 
 [mastery]
-# Mastery is a moving average of quiz scores / 5: m <- m + alpha * (score/5 - m).
+# Mastery is a moving average of quiz scores / 5: m <- m + alpha * w_type * (score/5 - m).
 # alpha = 0.3
+
+[mastery.type_weights]
+# How much one answer of each type moves mastery (0-1). Guessable types count less.
+# short_answer = 1.0
+# multiple_choice = 0.6
+# true_false = 0.3
 """
 
 

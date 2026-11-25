@@ -217,3 +217,26 @@ Version 2 candidates: FastAPI, Postgres, FolderSource, other question types, web
 - [ ] Which provider is the default vision model? With many images, a cheaper model saves a lot.
 - [ ] Which search service for `check-latest`? A dedicated search API (such as Tavily), or the model's built-in web search, which is written differently for each provider.
 - [ ] Which providers do you currently have API keys for? This decides what step 5 tests first.
+
+## Version 2
+
+2026-11-25 · Version 1 (milestones 1–9) is complete; `check-latest` moved here from version 1.
+
+Version 2 is a minimal step up: more question types, then an HTTP API and a web frontend on top of
+the same services, then `check-latest`. Each item below is its own milestone, with a plan
+approved before it is built.
+
+1. **Multiple choice and true/false questions.** The model writes the question, the options and
+   the correct answer; grading is local, with no model call. Both count less toward mastery than a
+   short answer, true/false least (guessing gets 50%); the weights are in `config.toml`. Each
+   attempt stores the options shown and the correct answer. Explain, code and mixed sessions wait.
+2. **HTTP API (FastAPI).** For personal use only: bound to 127.0.0.1, no authentication. Endpoints
+   call the existing services and add no logic of their own. A quiz takes two requests (get a
+   question, then submit an answer), so issued questions are stored until they are answered. Long
+   operations such as `sync` and `review` run synchronously for now.
+3. **Web frontend (React + Vite + TypeScript).** Talks only to the API. Pages: take a quiz, view
+   status and mastery, read reports. The pages are planned before they are built.
+4. **`check-latest`**, after the frontend.
+
+Deferred beyond this version: the local-folder source, local models (Ollama), the explain and code
+question types and mixed sessions, Postgres, webhooks.

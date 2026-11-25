@@ -32,6 +32,11 @@ The full design is in [docs/SPEC.md](docs/SPEC.md); changed decisions are in
 
    [mastery]                         # optional
    alpha = 0.3                       # mastery = moving average of score / 5
+
+   [mastery.type_weights]            # optional: how much one answer moves mastery
+   short_answer = 1.0
+   multiple_choice = 0.6
+   true_false = 0.3                  # lowest: guessing gets 50%
    ```
 
 Learnova reads secrets from environment variables. To load `.env` and run from any directory,
@@ -139,20 +144,27 @@ learnova review
 learnova review --all
 ```
 
-### `learnova quiz [--count N] [--workspace NAME]`
+### `learnova quiz [--count N] [--workspace NAME] [--type short|mc|tf]`
 
-Asks N short-answer questions (default 5) on knowledge points drawn by weight: important,
-weakly mastered and long-unquizzed points come up most, mastered ones now and then. Draws from
-all workspaces unless `--workspace` is given. The model writes each question from your notes and
-grades your answer from 0 to 5 (one decimal) using the levels in
-[docs/grading-rubric.md](docs/grading-rubric.md); edit that file to change how answers are
-graded. Each answer updates the point's mastery.
+Asks N questions (default 5) on knowledge points drawn by weight: important, weakly mastered and
+long-unquizzed points come up most, mastered ones now and then. Draws from all workspaces unless
+`--workspace` is given. The model writes each question from your notes. Each answer updates the
+point's mastery.
 
-Finish an answer with an empty line; type `s` to skip a question or `q` to stop.
+- `--type short` (default): answer in your own words, finishing with an empty line. The model
+  grades it from 0 to 5 (one decimal) using the levels in
+  [docs/grading-rubric.md](docs/grading-rubric.md); edit that file to change how answers are
+  graded.
+- `--type mc`: multiple choice, answer A–D. `--type tf`: true/false, answer `t` or `f`. These are
+  checked locally (5 if right, 0 if wrong, no model call) and move mastery less than short
+  answers, true/false least (see `[mastery.type_weights]`).
+
+Type `s` to skip a question or `q` to stop.
 
 ```bash
 learnova quiz
 learnova quiz --count 10 --workspace interview
+learnova quiz --type mc
 ```
 
 ### `learnova status [--workspace NAME] [--weakest N]`
