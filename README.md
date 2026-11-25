@@ -25,6 +25,10 @@ The full design is in [docs/SPEC.md](docs/SPEC.md); changed decisions are in
 
    [models.api_key_env]              # only if a key is not under its standard name
    openai = "MODEL_API_KEY"
+
+   [weights]                         # optional: how quiz questions are drawn
+   epsilon = 0.1                     # mastered points keep at least this share of weight
+   new_point_days = 7                # never-quizzed points count as this many days unreviewed
    ```
 
 Learnova reads secrets from environment variables. To load `.env` and run from any directory,

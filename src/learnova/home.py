@@ -29,6 +29,11 @@ DEFAULT_CONFIG = """\
 # Which environment variable holds each provider's key. Unlisted providers use the standard
 # name: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, DEEPSEEK_API_KEY.
 # openai = "MODEL_API_KEY"
+
+[weights]
+# How quiz questions are drawn: w = importance × max(1 − mastery, epsilon) × (1 + ln(1 + days)).
+# epsilon = 0.1          # floor, so mastered points still come up now and then
+# new_point_days = 7     # "days since last review" for a point never quizzed
 """
 
 

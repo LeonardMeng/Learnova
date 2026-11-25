@@ -23,3 +23,4 @@ The full spec is in docs/SPEC.md. Read it before starting any task.
 - [x] Milestone 5: Connect models
 - [x] Milestone 6: Images
 - [x] Milestone 7: Gap review
+- [x] Milestone 8: Weighting algorithm
