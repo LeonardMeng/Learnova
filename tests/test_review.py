@@ -8,6 +8,7 @@ import pytest
 from learnova.llm.factory import LLMCallError
 from learnova.models import NoteContent, NoteSummary
 from learnova.report import render_review, write_review_report
+from learnova.scheduler.mastery import replay
 from learnova.services import knowledge
 from learnova.services.review import (
     DuplicateCheck,
@@ -346,7 +347,7 @@ def test_merge_with_overlapping_notes(repos, tmp_path):
     dup = repos.knowledge.create(user.id, "Dup", "d", 2)
     for p, n in ((keep, n1), (dup, n1), (dup, n2)):
         repos.knowledge.link(p.id, n.id)
-    repos.knowledge.merge(dup.id, keep.id)
+    repos.knowledge.merge(dup.id, keep.id, replay)
     assert repos.knowledge.get(dup.id) is None
     assert sorted(s.note_id for s in repos.knowledge.sources(user.id)) == sorted([n1.id, n2.id])
 

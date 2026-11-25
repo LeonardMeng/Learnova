@@ -101,6 +101,8 @@ The database has 8 tables. Knowledge points, attempts and mastery belong to the 
 
 Question type is an enum: `SHORT_ANSWER` (the only one in version 1), `MULTIPLE_CHOICE`, `TRUE_FALSE`, `EXPLAIN`, `CODE`.
 
+Answers are scored 0–5 with one decimal, anchored to the levels in the [grading rubric](grading-rubric.md), which the grading prompt loads at runtime.
+
 ### 4. Weighting algorithm (separate module)
 
 The weighting algorithm lives in `scheduler/weights.py` as a pure function that touches neither the database nor a model. It takes one knowledge point's state and the current time and returns a weight, which makes it easy to test and easy to replace. Version 1 formula:
@@ -211,7 +213,7 @@ Version 2 candidates: FastAPI, Postgres, FolderSource, other question types, web
 - [ ] Are the notes nested sub-pages or a Notion database? Confirm after step 3.
 - [ ] Should the same knowledge point in different workspaces (e.g. "gradient descent" in both) be merged automatically? Suggested: no automatic merging in version 1; the report flags "may duplicate an existing knowledge point" and you confirm.
 - [ ] Should `review` look only at changed notes (cheaper), or also allow a full re-review? Suggested: changed notes by default, plus an `--all` flag.
-- [ ] Score on a 0–5 or a 0–100 scale?
+- [x] Score on a 0–5 or a 0–100 scale? 0–5 with one decimal; see the [grading rubric](grading-rubric.md).
 - [ ] Which provider is the default vision model? With many images, a cheaper model saves a lot.
 - [ ] Which search service for `check-latest`? A dedicated search API (such as Tavily), or the model's built-in web search, which is written differently for each provider.
 - [ ] Which providers do you currently have API keys for? This decides what step 5 tests first.

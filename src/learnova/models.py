@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -112,3 +113,38 @@ class PointSource(BaseModel):
     note_id: uuid.UUID
     note_path: tuple[str, ...]
     workspace_name: str
+
+
+class QuestionType(StrEnum):
+    SHORT_ANSWER = "short_answer"  # the only type used in version 1
+    MULTIPLE_CHOICE = "multiple_choice"
+    TRUE_FALSE = "true_false"
+    EXPLAIN = "explain"
+    CODE = "code"
+
+
+class Attempt(BaseModel):
+    """One answer to one quiz question."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    point_id: uuid.UUID
+    question: str
+    question_type: QuestionType
+    answer: str
+    score: float  # 0–5, one decimal
+    feedback: str
+    created_at: datetime
+
+
+class Mastery(BaseModel):
+    """Cached result of replaying a point's attempts (see scheduler/mastery.py)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    point_id: uuid.UUID
+    mastery: float  # 0–1
+    review_count: int
+    last_reviewed: datetime | None

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from sqlalchemy import (
     JSON,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     MetaData,
@@ -135,3 +136,35 @@ class KpSourceRow(Base):
     note_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True, index=True
     )
+
+
+class AttemptRow(Base):
+    __tablename__ = "attempts"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    # `kp merge` moves attempts before deleting a point, so this cascade only ever removes
+    # attempts of a point that is deleted on purpose.
+    point_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_points.id", ondelete="CASCADE"), index=True
+    )
+    question: Mapped[str] = mapped_column(Text)
+    question_type: Mapped[str] = mapped_column(String(32))  # QuestionType value
+    answer: Mapped[str] = mapped_column(Text)
+    score: Mapped[float] = mapped_column(Float)  # 0–5, one decimal
+    feedback: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class MasteryRow(Base):
+    """Cache of replaying a point's attempts; rebuilt whenever its attempts change."""
+
+    __tablename__ = "mastery"
+
+    point_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_points.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    mastery: Mapped[float] = mapped_column(Float)
+    review_count: Mapped[int] = mapped_column(Integer)
+    last_reviewed: Mapped[datetime | None] = mapped_column(UTCDateTime)

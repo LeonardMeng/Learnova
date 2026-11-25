@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import random
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
+from rich.table import Table
 
 from learnova.cli import kp, workspace
 from learnova.cli.common import repositories, short_path, user_errors
@@ -14,7 +18,9 @@ from learnova.home import WORKSPACE_FILE
 from learnova.llm import factory
 from learnova.report import write_review_report
 from learnova.services import images as images_service
+from learnova.services import quiz as quiz_service
 from learnova.services import review as review_service
+from learnova.services import status as status_service
 from learnova.services.workspaces import WorkspaceError, WorkspaceService
 from learnova.sources import notion
 from learnova.sources.notion_markdown import PLACEHOLDER_TYPES, SUPPORTED_TYPES
@@ -195,6 +201,165 @@ def review(
             f"{len(run.failed)} note(s) failed and will be retried.", fg=typer.colors.YELLOW
         )
     typer.echo(f"Report: {short_path(path)}")
+
+
+@app.command()
+def quiz(
+    count: Annotated[int, typer.Option("--count", "-n", min=1, help="How many questions.")] = 5,
+    workspace_name: Annotated[
+        str | None,
+        typer.Option("--workspace", "-w", help="Only points from this workspace. Default: all."),
+    ] = None,
+) -> None:
+    """Answer short questions on knowledge points drawn by weight; the model grades them."""
+    with user_errors():
+        repos = repositories()
+        if workspace_name is not None:
+            WorkspaceService(repos).current(name=workspace_name)  # checks the name exists
+        settings = load_settings()
+        now = datetime.now(UTC)
+        items = quiz_service.candidates(repos, now, settings.weights, workspace_name)
+        if not items:
+            typer.echo(
+                "No knowledge points to quiz yet. Run `learnova review` in a workspace first."
+            )
+            return
+        model = factory.main_model(settings.models)
+        quiz_service.load_rubric()  # fail now, not after the first answer
+        questioner = quiz_service.llm_questioner(model)
+        grader = quiz_service.llm_grader(model)
+    drawn = quiz_service.draw(items, count, random.Random())
+    spaces = len({s.workspace_name for i in drawn for s in i.sources})
+    typer.echo(
+        f"Quiz: {len(drawn)} question(s) from {spaces} workspace(s) · {settings.models.main}\n"
+        "Answer in a few sentences and finish with an empty line. Type s to skip, q to quit."
+    )
+
+    results = []  # (point name, score or None, mastery before, mastery after)
+    for number, item in enumerate(drawn, 1):
+        notes = quiz_service.note_texts(repos, item)
+        typer.secho(
+            f"\nQuestion {number}/{len(drawn)} · {notes[0].path if notes else ''}", bold=True
+        )
+        try:
+            question = questioner(quiz_service.QuestionRequest(item.point, notes))
+        except factory.LLMCallError as e:
+            typer.secho(f"Couldn't write a question: {e}", fg=typer.colors.YELLOW)
+            continue
+        typer.echo(question)
+        answer = _read_answer()
+        if answer is None:
+            break
+        before = item.mastery.mastery if item.mastery else 0.0
+        if not answer:
+            results.append((item.point.name, None, before, before))
+            typer.echo("Skipped.")
+            continue
+        try:
+            grade = grader(quiz_service.GradeRequest(item.point, notes, question, answer))
+        except factory.LLMCallError as e:
+            typer.secho(f"Couldn't grade the answer (not recorded): {e}", fg=typer.colors.YELLOW)
+            continue
+        _, mastery = quiz_service.record(
+            repos, item, question, answer, grade, datetime.now(UTC), settings.mastery
+        )
+        results.append((item.point.name, grade.score, before, mastery.mastery))
+        typer.secho(
+            f"\nScore {grade.score:.1f} / 5 · {item.point.name} · "
+            f"mastery {before:.2f} → {mastery.mastery:.2f}",
+            fg=typer.colors.GREEN if grade.score >= 3.5 else typer.colors.YELLOW,
+        )
+        typer.echo(grade.feedback.strip())
+        if grade.missing.strip():
+            typer.echo(f"Missing: {grade.missing.strip()}")
+        typer.secho(f"Reference answer: {grade.reference_answer.strip()}", dim=True)
+
+    if results:
+        typer.echo("\nSummary")
+        for name, score, before, after in results:
+            shown = "skipped" if score is None else f"{score:.1f}/5"
+            typer.echo(f"  {shown:>7}  {name}  ({before:.2f} → {after:.2f})")
+
+
+def _read_answer() -> str | None:
+    """Lines until an empty line. "" = skip, None = quit (or end of input)."""
+    lines: list[str] = []
+    while True:
+        try:
+            line = input("> ")
+        except EOFError:
+            return "\n".join(lines) if lines else None
+        command = line.strip().lower()
+        if not lines and command in ("q", "quit"):
+            return None
+        if not lines and command in ("s", "skip"):
+            return ""
+        if not line.strip():
+            if lines:
+                return "\n".join(lines)
+            continue  # an empty line before any text doesn't end the answer
+        lines.append(line)
+
+
+@app.command()
+def status(
+    workspace_name: Annotated[
+        str | None,
+        typer.Option("--workspace", "-w", help="Only points from this workspace. Default: all."),
+    ] = None,
+    weakest: Annotated[int, typer.Option("--weakest", min=1, help="How many weak points.")] = 10,
+) -> None:
+    """Show mastery, when you last quizzed, and your weakest knowledge points."""
+    with user_errors():
+        repos = repositories()
+        if workspace_name is not None:
+            WorkspaceService(repos).current(name=workspace_name)
+        st = status_service.status(
+            repos, datetime.now(UTC), load_settings().weights, workspace_name, weakest
+        )
+    if not st.overall.points:
+        typer.echo("No knowledge points yet. Run `learnova review` in a workspace first.")
+        return
+
+    def line(s: status_service.Summary) -> str:
+        return (
+            f"{s.points} point(s) · {s.quizzed} quizzed · average mastery "
+            f"{s.average_mastery:.2f} · last quiz {_when(s.last_quiz)}"
+        )
+
+    title = "All workspaces" if workspace_name is None else f"Workspace {workspace_name!r}"
+    typer.secho(f"{title}: {line(st.overall)}", bold=True)
+    if workspace_name is None:
+        for s in st.workspaces:
+            typer.echo(f"  {s.name}: {line(s)}")
+
+    table = Table(box=None, pad_edge=False, title_justify="left")
+    for col, kw in (
+        ("Point", {"overflow": "fold"}),
+        ("Imp.", {"justify": "right"}),
+        ("Mastery", {"justify": "right"}),
+        ("Quizzed", {"justify": "right"}),
+        ("Last quiz", {}),
+        ("From", {"overflow": "fold"}),
+    ):
+        table.add_column(col, **kw)
+    for r in st.weakest:
+        m = r.mastery
+        source = review_service.where(r.sources) if r.sources else "[dim](no notes)[/dim]"
+        table.add_row(
+            r.point.name,
+            str(r.point.importance),
+            f"{m.mastery:.2f}" if m else "–",
+            str(m.review_count) if m else "0",
+            _when(m.last_reviewed if m else None),
+            source,
+        )
+    typer.echo(f"\nWeakest {len(st.weakest)}:")
+    Console().print(table)
+
+
+def _when(moment: datetime | None) -> str:
+    return moment.astimezone().strftime("%Y-%m-%d %H:%M") if moment else "never"
 
 
 @app.command()

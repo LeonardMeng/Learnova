@@ -5,3 +5,4 @@
 - 2026-11-25: Mastery is always recomputed by replaying a point's attempts in time order. `kp merge` moves links in Milestone 7; Milestone 9 must extend it to move attempts and recompute mastery (with a test).
 - 2026-11-25: Added `learnova kp list [--workspace]` and `learnova kp importance <point> <1-5>` (not in the spec command table) so points can be seen and importance changed before `status` exists.
 - 2026-11-25: Weights use fractional days since the last quiz. A point never quizzed counts as `new_point_days` (default 7, in config.toml `[weights]`) so new points are not starved by long-unreviewed ones.
+- 2026-11-25: Milestone 10 (`check-latest`) moved to version 2; version 1 ends at Milestone 9.

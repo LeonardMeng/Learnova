@@ -34,6 +34,10 @@ DEFAULT_CONFIG = """\
 # How quiz questions are drawn: w = importance × max(1 − mastery, epsilon) × (1 + ln(1 + days)).
 # epsilon = 0.1          # floor, so mastered points still come up now and then
 # new_point_days = 7     # "days since last review" for a point never quizzed
+
+[mastery]
+# Mastery is a moving average of quiz scores / 5: m <- m + alpha * (score/5 - m).
+# alpha = 0.3
 """
 
 

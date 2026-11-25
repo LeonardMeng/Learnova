@@ -29,6 +29,9 @@ The full design is in [docs/SPEC.md](docs/SPEC.md); changed decisions are in
    [weights]                         # optional: how quiz questions are drawn
    epsilon = 0.1                     # mastered points keep at least this share of weight
    new_point_days = 7                # never-quizzed points count as this many days unreviewed
+
+   [mastery]                         # optional
+   alpha = 0.3                       # mastery = moving average of score / 5
    ```
 
 Learnova reads secrets from environment variables. To load `.env` and run from any directory,
@@ -49,6 +52,8 @@ learnova sync          # read notes from Notion, download and describe images
 learnova review        # extract knowledge points and write a report to reports/
 # fix the problems in Notion, then:
 learnova sync && learnova review    # only the notes you changed are reviewed again
+learnova quiz          # from anywhere: questions drawn from all your workspaces
+learnova status        # mastery and your weakest points
 ```
 
 ## Which workspace a command uses
@@ -134,6 +139,32 @@ learnova review
 learnova review --all
 ```
 
+### `learnova quiz [--count N] [--workspace NAME]`
+
+Asks N short-answer questions (default 5) on knowledge points drawn by weight: important,
+weakly mastered and long-unquizzed points come up most, mastered ones now and then. Draws from
+all workspaces unless `--workspace` is given. The model writes each question from your notes and
+grades your answer from 0 to 5 (one decimal) using the levels in
+[docs/grading-rubric.md](docs/grading-rubric.md); edit that file to change how answers are
+graded. Each answer updates the point's mastery.
+
+Finish an answer with an empty line; type `s` to skip a question or `q` to stop.
+
+```bash
+learnova quiz
+learnova quiz --count 10 --workspace interview
+```
+
+### `learnova status [--workspace NAME] [--weakest N]`
+
+Shows how many points you have and have quizzed, average mastery and when you last quizzed,
+overall and per workspace, then your N weakest points (default 10).
+
+```bash
+learnova status
+learnova status -w interview --weakest 20
+```
+
 ### `learnova kp list [--workspace NAME]`
 
 Lists your knowledge points, most important first, with the notes they come from. Points belong
@@ -155,8 +186,8 @@ learnova kp importance "Redis persistence: RDB vs AOF" 5
 
 ### `learnova kp merge POINT --into EXISTING`
 
-Merges a duplicate point into another: the kept point gets all of the duplicate's notes, and the
-duplicate is removed. The review report prints this command under each possible duplicate.
+Merges a duplicate point into another: the kept point gets all of the duplicate's notes and quiz
+attempts, its mastery is recomputed from all of them, and the duplicate is removed. The review report prints this command under each possible duplicate.
 
 ```bash
 learnova kp merge "GD" --into "Gradient descent"
@@ -184,11 +215,11 @@ learnova ask "hello" --model anthropic:<model-name>
 └── reports/            review reports
 ```
 
-## Coming next
+## Version 2 candidates
 
-`quiz` (questions drawn by weight, graded by the model), `status` (mastery and weakest points),
-and `check-latest` (look for recent changes to a knowledge point). See the milestones in
-[docs/SPEC.md](docs/SPEC.md).
+`check-latest` (look for recent changes to a knowledge point), Ollama, a FastAPI layer, Postgres,
+a local-folder source, more question types and webhooks. See [docs/SPEC.md](docs/SPEC.md) and
+[docs/decisions.md](docs/decisions.md).
 
 ## Development
 

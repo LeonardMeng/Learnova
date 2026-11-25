@@ -11,18 +11,23 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from learnova.models import (
+    Attempt,
     ImageRef,
     KnowledgePoint,
+    Mastery,
     Note,
     NoteImage,
     NoteSummary,
     PointSource,
+    QuestionType,
     User,
     Workspace,
 )
 from learnova.storage.repositories import (
+    AttemptRepository,
     ImageRepository,
     KnowledgeRepository,
+    MasteryFn,
     NoteRepository,
     PointNotFound,
     UserRepository,
@@ -31,8 +36,10 @@ from learnova.storage.repositories import (
     WorkspaceRepository,
 )
 from learnova.storage.tables import (
+    AttemptRow,
     KnowledgePointRow,
     KpSourceRow,
+    MasteryRow,
     NoteImageRow,
     NoteRow,
     UserRow,
@@ -387,7 +394,7 @@ class SqlKnowledgeRepository(KnowledgeRepository):
             if row is not None:
                 s.delete(row)
 
-    def merge(self, point_id, into_id) -> KnowledgePoint:
+    def merge(self, point_id, into_id, mastery_from: MasteryFn) -> KnowledgePoint:
         with self._sessions.begin() as s:
             point, into = s.get(KnowledgePointRow, point_id), s.get(KnowledgePointRow, into_id)
             if point is None or into is None:
@@ -399,9 +406,110 @@ class SqlKnowledgeRepository(KnowledgeRepository):
                 if link.note_id not in kept_notes:
                     s.add(KpSourceRow(point_id=into_id, note_id=link.note_id))
                 s.delete(link)
-            # Milestone 9: also move point_id's attempts here and recompute into's mastery.
+            s.execute(
+                update(AttemptRow).where(AttemptRow.point_id == point_id).values(point_id=into_id)
+            )
+            old_mastery = s.get(MasteryRow, point_id)
+            if old_mastery is not None:
+                s.delete(old_mastery)
             s.flush()
+            _rebuild_mastery(s, into.user_id, into_id, mastery_from)
             s.delete(point)
             into.updated_at = utcnow()
             s.flush()
             return _point(into)
+
+
+def _attempt(row: AttemptRow) -> Attempt:
+    return Attempt(
+        id=row.id,
+        user_id=row.user_id,
+        point_id=row.point_id,
+        question=row.question,
+        question_type=QuestionType(row.question_type),
+        answer=row.answer,
+        score=row.score,
+        feedback=row.feedback,
+        created_at=row.created_at,
+    )
+
+
+def _mastery(row: MasteryRow) -> Mastery:
+    return Mastery(
+        point_id=row.point_id,
+        mastery=row.mastery,
+        review_count=row.review_count,
+        last_reviewed=row.last_reviewed,
+    )
+
+
+def _rebuild_mastery(s: Session, user_id, point_id, mastery_from: MasteryFn) -> MasteryRow | None:
+    """Replay all of the point's attempts into its mastery row (inside the caller's transaction)."""
+    pairs = list(
+        s.execute(
+            select(AttemptRow.created_at, AttemptRow.score).where(AttemptRow.point_id == point_id)
+        )
+    )
+    row = s.get(MasteryRow, point_id)
+    if not pairs:
+        if row is not None:
+            s.delete(row)
+        return None
+    state = mastery_from([(when, score) for when, score in pairs])
+    if row is None:
+        row = MasteryRow(point_id=point_id, user_id=user_id)
+        s.add(row)
+    row.mastery, row.review_count, row.last_reviewed = (
+        state.mastery,
+        state.review_count,
+        state.last_reviewed,
+    )
+    s.flush()
+    return row
+
+
+class SqlAttemptRepository(AttemptRepository):
+    def __init__(self, sessions: sessionmaker[Session]):
+        self._sessions = sessions
+
+    def record(
+        self,
+        user_id,
+        point_id,
+        question,
+        question_type,
+        answer,
+        score,
+        feedback,
+        created_at,
+        mastery_from: MasteryFn,
+    ) -> tuple[Attempt, Mastery]:
+        with self._sessions.begin() as s:
+            row = AttemptRow(
+                user_id=user_id,
+                point_id=point_id,
+                question=question,
+                question_type=QuestionType(question_type).value,
+                answer=answer,
+                score=score,
+                feedback=feedback,
+                created_at=created_at,
+            )
+            s.add(row)
+            s.flush()
+            mastery = _rebuild_mastery(s, user_id, point_id, mastery_from)
+            return _attempt(row), _mastery(mastery)
+
+    def list_for_point(self, point_id) -> list[Attempt]:
+        with self._sessions() as s:
+            rows = s.scalars(
+                select(AttemptRow)
+                .where(AttemptRow.point_id == point_id)
+                .order_by(AttemptRow.created_at)
+            )
+            return [_attempt(r) for r in rows]
+
+    def mastery(self, user_id) -> dict[uuid.UUID, Mastery]:
+        with self._sessions() as s:
+            rows = s.scalars(select(MasteryRow).where(MasteryRow.user_id == user_id))
+            return {r.point_id: _mastery(r) for r in rows}

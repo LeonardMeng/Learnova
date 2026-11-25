@@ -15,6 +15,7 @@ from notion_client.errors import APIErrorCode, APIResponseError, RequestTimeoutE
 from learnova.config import load_settings
 from learnova.llm.factory import LLMCallError, LLMConfigError
 from learnova.services.knowledge import KnowledgeError
+from learnova.services.quiz import QuizError
 from learnova.services.workspaces import WorkspaceError
 from learnova.sources import notion
 from learnova.storage.database import Repositories, open_repositories
@@ -41,7 +42,13 @@ def fail(message: str) -> NoReturn:
 def user_errors() -> Iterator[None]:
     try:
         yield
-    except (notion.NotionConfigError, WorkspaceError, LLMConfigError, KnowledgeError) as e:
+    except (
+        notion.NotionConfigError,
+        WorkspaceError,
+        LLMConfigError,
+        KnowledgeError,
+        QuizError,
+    ) as e:
         fail(str(e))
     except LLMCallError as e:
         fail(f"The model call failed. {e}")

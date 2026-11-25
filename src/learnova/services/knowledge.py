@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from learnova.config import load_settings
 from learnova.models import KnowledgePoint, PointSource
+from learnova.scheduler.mastery import replay
 from learnova.services.review import where
 from learnova.storage.database import Repositories
 
@@ -80,7 +82,8 @@ def merge_points(repos: Repositories, point_text: str, into_text: str) -> MergeR
     point, into = find_point(repos, point_text), find_point(repos, into_text)
     if point.id == into.id:
         raise KnowledgeError("That's the same knowledge point.")
-    kept = repos.knowledge.merge(point.id, into.id)
+    alpha = load_settings().mastery
+    kept = repos.knowledge.merge(point.id, into.id, lambda pairs: replay(pairs, alpha))
     user = repos.users.get_or_create_local()
     count = sum(1 for s in repos.knowledge.sources(user.id) if s.point_id == kept.id)
     return MergeResult(merged=point, into=kept, source_count=count)

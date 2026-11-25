@@ -7,6 +7,7 @@ import tomllib
 from dataclasses import dataclass, field
 
 from learnova.home import ensure_home
+from learnova.scheduler.mastery import MasteryConfig
 from learnova.scheduler.weights import WeightConfig
 
 
@@ -22,6 +23,7 @@ class Settings:
     database_url: str
     models: ModelSettings = field(default_factory=ModelSettings)
     weights: WeightConfig = field(default_factory=WeightConfig)
+    mastery: MasteryConfig = field(default_factory=MasteryConfig)
 
 
 def load_settings() -> Settings:
@@ -40,5 +42,8 @@ def load_settings() -> Settings:
         weights=WeightConfig(
             epsilon=float(weights.get("epsilon", WeightConfig.epsilon)),
             new_point_days=float(weights.get("new_point_days", WeightConfig.new_point_days)),
+        ),
+        mastery=MasteryConfig(
+            alpha=float(data.get("mastery", {}).get("alpha", MasteryConfig.alpha))
         ),
     )

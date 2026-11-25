@@ -5,19 +5,24 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
 from learnova.models import (
+    Attempt,
     ImageRef,
     KnowledgePoint,
+    Mastery,
     Note,
     NoteImage,
     NoteSummary,
     PointSource,
+    QuestionType,
     User,
     Workspace,
 )
+from learnova.scheduler.mastery import MasteryState
 
 
 class WorkspaceNotFound(LookupError):
@@ -127,6 +132,11 @@ class PointNotFound(LookupError):
     pass
 
 
+# Turns (time, score) pairs into a mastery state, e.g. scheduler.mastery.replay with the user's
+# settings. Passed in so the repositories don't need to know the mastery rule or its settings.
+MasteryFn = Callable[[list[tuple[datetime, float]]], MasteryState]
+
+
 class KnowledgeRepository(ABC):
     @abstractmethod
     def get(self, point_id: uuid.UUID) -> KnowledgePoint | None: ...
@@ -161,6 +171,33 @@ class KnowledgeRepository(ABC):
     def unlink(self, point_id: uuid.UUID, note_id: uuid.UUID) -> None: ...
 
     @abstractmethod
-    def merge(self, point_id: uuid.UUID, into_id: uuid.UUID) -> KnowledgePoint:
-        """Move point_id's links onto into_id and delete point_id, in one transaction.
-        Raises PointNotFound."""
+    def merge(
+        self, point_id: uuid.UUID, into_id: uuid.UUID, mastery_from: MasteryFn
+    ) -> KnowledgePoint:
+        """In one transaction: move point_id's note links and attempts onto into_id, rebuild
+        into_id's mastery from all its attempts, and delete point_id. Raises PointNotFound."""
+
+
+class AttemptRepository(ABC):
+    @abstractmethod
+    def record(
+        self,
+        user_id: uuid.UUID,
+        point_id: uuid.UUID,
+        question: str,
+        question_type: QuestionType,
+        answer: str,
+        score: float,
+        feedback: str,
+        created_at: datetime,
+        mastery_from: MasteryFn,
+    ) -> tuple[Attempt, Mastery]:
+        """Save the attempt and rebuild the point's mastery, in one transaction."""
+
+    @abstractmethod
+    def list_for_point(self, point_id: uuid.UUID) -> list[Attempt]:
+        """Oldest first."""
+
+    @abstractmethod
+    def mastery(self, user_id: uuid.UUID) -> dict[uuid.UUID, Mastery]:
+        """Mastery of every point that has been quizzed, by point id."""
