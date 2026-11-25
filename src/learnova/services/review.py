@@ -11,6 +11,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
@@ -335,3 +336,43 @@ def where(sources: list[PointSource]) -> str:
 
 def _where(sources: list[PointSource]) -> str:
     return f"  [{where(sources)}]"
+
+
+# --- one `review` run (used by the CLI and the API) ------------------------------------------
+
+
+@dataclass
+class ReviewOutcome:
+    run: ReviewRun
+    report: Path
+    model: str
+    pending_images: int  # images without a description: the review couldn't see them
+
+
+def run_review(
+    repos: Repositories,
+    workspace: Workspace,
+    everything: bool = False,
+    on_start: Callable[[int, str, int], None] | None = None,
+    on_note: Callable[[Note, str], None] | None = None,
+) -> ReviewOutcome | None:
+    """Review changed notes (or all) with the main model and write the report. None when there is
+    nothing to review."""
+    from learnova.config import load_settings
+    from learnova.report import write_review_report
+    from learnova.services.images import pending_images
+
+    notes = notes_to_review(repos, workspace, everything)
+    if not notes:
+        return None
+    settings = load_settings().models
+    model = factory.main_model(settings)
+    pending = len(pending_images(repos, workspace))
+    if on_start:
+        on_start(len(notes), settings.main, pending)
+    run = review_notes(
+        workspace, repos, notes, llm_reviewer(model), llm_deduper(model), on_note=on_note
+    )
+    user = repos.users.get_or_create_local()
+    path = write_review_report(run, settings.main, repos.knowledge.list_for_user(user.id))
+    return ReviewOutcome(run, path, settings.main, pending)

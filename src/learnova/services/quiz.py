@@ -14,26 +14,58 @@ from __future__ import annotations
 import random
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from pydantic import BaseModel
 
+from learnova.errors import ConflictError, LearnovaError, NotFoundError
 from learnova.llm import factory, prompts
-from learnova.models import Attempt, KnowledgePoint, Mastery, PointSource, QuestionType
+from learnova.models import (
+    Attempt,
+    IssuedQuestion,
+    IssuedStatus,
+    KnowledgePoint,
+    Mastery,
+    PointSource,
+    QuestionType,
+)
 from learnova.scheduler import weights as weights_mod
 from learnova.scheduler.mastery import MasteryConfig, replay, round_score
 from learnova.services.review import read_note
+from learnova.services.workspaces import NoSuchWorkspace
 from learnova.storage.database import Repositories
+from learnova.storage.repositories import QuestionAlreadyClosed
 
 MAX_NOTES = 2  # notes shown to the model per question
+QUESTION_TTL = timedelta(days=7)  # open questions older than this are deleted
 MAX_NOTE_CHARS = 6000
 RUBRIC_FILE = Path("docs") / "grading-rubric.md"
 
 
-class QuizError(Exception):
-    """A problem worth showing to the user as-is."""
+class QuizError(LearnovaError):
+    pass
+
+
+class RubricMissing(QuizError):
+    status = 500
+
+
+class NoPointsLeft(QuizError, NotFoundError):
+    """No knowledge point left to ask (none at all, or all excluded)."""
+
+
+class QuestionNotFound(QuizError, NotFoundError):
+    pass
+
+
+class QuestionClosed(QuizError, ConflictError):
+    """The question was answered or skipped already."""
+
+
+class InvalidAnswer(QuizError):
+    pass
 
 
 # --- what the model returns ----------------------------------------------------------------
@@ -121,8 +153,10 @@ class ChoiceQuestion:
         }
 
 
-class InvalidQuestion(Exception):
+class InvalidQuestion(QuizError):
     """The model's question didn't pass the checks, even after a retry."""
+
+    status = 502
 
 
 Questioner = Callable[[QuestionRequest], str]
@@ -146,7 +180,9 @@ def candidates(
     if workspace_name is not None and workspace_name not in {
         w.name for w in repos.workspaces.list(user.id)
     }:
-        raise QuizError(f"No workspace named {workspace_name!r}. See `learnova workspace list`.")
+        raise NoSuchWorkspace(
+            f"No workspace named {workspace_name!r}. See `learnova workspace list`."
+        )
     by_point: dict = {}
     for s in repos.knowledge.sources(user.id):
         by_point.setdefault(s.point_id, []).append(s)
@@ -210,6 +246,7 @@ def record(
     grade: Grade,
     now: datetime,
     config: MasteryConfig,
+    issued_question_id=None,
 ) -> tuple[Attempt, Mastery]:
     user = repos.users.get_or_create_local()
     feedback = grade.feedback.strip()
@@ -225,6 +262,7 @@ def record(
         feedback,
         now,
         lambda attempts: replay(attempts, config),
+        issued_question_id=issued_question_id,
     )
 
 
@@ -291,6 +329,7 @@ def record_choice(
     chosen: int,
     now: datetime,
     config: MasteryConfig,
+    issued_question_id=None,
 ) -> tuple[Attempt, Mastery]:
     user = repos.users.get_or_create_local()
     shown = question.text
@@ -312,6 +351,7 @@ def record_choice(
         now,
         lambda attempts: replay(attempts, config),
         question_data=question.data(chosen),
+        issued_question_id=issued_question_id,
     )
 
 
@@ -322,7 +362,7 @@ def find_rubric(start: Path | None = None) -> Path:
         candidate = directory / RUBRIC_FILE
         if candidate.is_file():
             return candidate
-    raise QuizError(f"Grading rubric {RUBRIC_FILE} not found above {here}.")
+    raise RubricMissing(f"Grading rubric {RUBRIC_FILE} not found above {here}.")
 
 
 def load_rubric() -> str:
@@ -406,3 +446,166 @@ def llm_grader(model) -> Grader:
         return normalize(factory.ask_structured(model, Grade, prompt))
 
     return grade
+
+
+# --- asking and answering, one question at a time (used by the CLI and the API) ----------------
+
+
+@dataclass(frozen=True)
+class QuizModels:
+    """The model calls a quiz needs; only those for the chosen question type are set."""
+
+    short_question: Questioner | None = None
+    grader: Grader | None = None
+    mc_question: ChoiceQuestioner | None = None
+    tf_question: ChoiceQuestioner | None = None
+
+
+def quiz_models(model, kind: QuestionType, rng: random.Random) -> QuizModels:
+    if kind == QuestionType.SHORT_ANSWER:
+        load_rubric()  # fail now, not after the first answer
+        return QuizModels(short_question=llm_questioner(model), grader=llm_grader(model))
+    if kind == QuestionType.MULTIPLE_CHOICE:
+        return QuizModels(mc_question=llm_mc_questioner(model, rng))
+    if kind == QuestionType.TRUE_FALSE:
+        return QuizModels(tf_question=llm_tf_questioner(model, rng))
+    raise QuizError(f"Question type {kind} is not available yet.")
+
+
+def grader_for(model) -> QuizModels:
+    """Answering needs only the grader (short answers); choices are checked locally."""
+    return QuizModels(grader=llm_grader(model))
+
+
+def issue_question(
+    repos: Repositories,
+    models: QuizModels,
+    kind: QuestionType,
+    now: datetime,
+    config: weights_mod.WeightConfig,
+    rng: random.Random,
+    workspace_name: str | None = None,
+    exclude: frozenset | set | list = (),
+) -> IssuedQuestion:
+    """Draw one point by weight (skipping `exclude`, the points already asked this session),
+    have the model write a question, and store it until it is answered."""
+    repos.issued.purge_open(now - QUESTION_TTL)
+    excluded = set(exclude)
+    items = [
+        i for i in candidates(repos, now, config, workspace_name) if i.point.id not in excluded
+    ]
+    if not items:
+        where = f" in {workspace_name!r}" if workspace_name else ""
+        more = " more" if excluded else ""
+        raise NoPointsLeft(f"No{more} knowledge points to ask{where}.")
+    item = draw(items, 1, rng)[0]
+    notes = note_texts(repos, item)
+    request = QuestionRequest(item.point, notes)
+    if kind == QuestionType.SHORT_ANSWER:
+        text, options, hidden = models.short_question(request), None, {}
+    else:
+        make = models.mc_question if kind == QuestionType.MULTIPLE_CHOICE else models.tf_question
+        q = make(request)
+        text, options = q.text, q.options
+        hidden = {"correct": q.correct, "explanation": q.explanation}
+    user = repos.users.get_or_create_local()
+    return repos.issued.create(
+        user.id, item.point.id, kind, text, options, hidden, [asdict(n) for n in notes], now
+    )
+
+
+@dataclass(frozen=True)
+class AnswerResult:
+    question: IssuedQuestion
+    point: KnowledgePoint
+    attempt: Attempt
+    score: float
+    correct: bool | None  # multiple choice / true-false only
+    correct_option: str | None  # e.g. "B) A log of writes" or "False"
+    feedback: str
+    missing: str
+    reference_answer: str
+    explanation: str
+    mastery_before: float
+    mastery_after: float
+
+
+def get_question(repos: Repositories, question_id) -> IssuedQuestion:
+    question = repos.issued.get(question_id)
+    if question is None:
+        raise QuestionNotFound(f"No question with id {question_id}.")
+    return question
+
+
+def _open(repos: Repositories, question_id) -> IssuedQuestion:
+    question = get_question(repos, question_id)
+    if question.status != IssuedStatus.OPEN:
+        raise QuestionClosed(f"This question was {question.status.value} already.")
+    return question
+
+
+def choice_of(question: IssuedQuestion) -> ChoiceQuestion:
+    return ChoiceQuestion(
+        type=question.question_type,
+        text=question.text,
+        options=list(question.options or []),
+        correct=int(question.hidden["correct"]),
+        explanation=question.hidden.get("explanation", ""),
+    )
+
+
+def option_label(choice: ChoiceQuestion, index: int) -> str:
+    option = choice.options[index]
+    return option if choice.type == QuestionType.TRUE_FALSE else f"{LETTERS[index]}) {option}"
+
+
+def answer_question(
+    repos: Repositories,
+    models: QuizModels,
+    question_id,
+    answer: str,
+    now: datetime,
+    config: MasteryConfig,
+) -> AnswerResult:
+    """Grade the answer (the model for short answers, locally for choices), record the attempt
+    and close the question, all or nothing."""
+    question = _open(repos, question_id)
+    point = repos.knowledge.get(question.point_id)
+    user = repos.users.get_or_create_local()
+    previous = repos.attempts.mastery(user.id).get(point.id)
+    before = previous.mastery if previous else 0.0
+    item = QuizItem(point, [], previous, 0.0)
+    try:
+        if question.question_type == QuestionType.SHORT_ANSWER:
+            if not answer.strip():
+                raise InvalidAnswer("The answer is empty; skip the question instead.")
+            notes = [NoteText(**n) for n in question.notes]
+            grade = models.grader(GradeRequest(point, notes, question.text, answer))
+            attempt, mastery = record(
+                repos, item, question.text, answer, grade, now, config, question.id
+            )
+            return AnswerResult(
+                question, point, attempt, grade.score, None, None, grade.feedback.strip(),
+                grade.missing.strip(), grade.reference_answer.strip(), "", before, mastery.mastery,
+            )  # fmt: skip
+        choice = choice_of(question)
+        chosen = parse_choice(choice, answer)
+        if chosen is None:
+            is_tf = choice.type == QuestionType.TRUE_FALSE
+            raise InvalidAnswer("Answer t or f." if is_tf else "Answer A, B, C or D.")
+        attempt, mastery = record_choice(repos, item, choice, chosen, now, config, question.id)
+    except QuestionAlreadyClosed:
+        raise QuestionClosed("This question was answered or skipped already.") from None
+    score = grade_choice(choice, chosen)
+    return AnswerResult(
+        question, point, attempt, score, score > 0, option_label(choice, choice.correct), "", "",
+        "", choice.explanation, before, mastery.mastery,
+    )  # fmt: skip
+
+
+def skip_question(repos: Repositories, question_id, now: datetime) -> None:
+    _open(repos, question_id)
+    try:
+        repos.issued.skip(question_id, now)
+    except QuestionAlreadyClosed:
+        raise QuestionClosed("This question was answered or skipped already.") from None

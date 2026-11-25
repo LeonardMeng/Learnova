@@ -15,6 +15,7 @@ from sqlalchemy.pool import NullPool
 from learnova.storage.repositories import (
     AttemptRepository,
     ImageRepository,
+    IssuedQuestionRepository,
     KnowledgeRepository,
     NoteRepository,
     UserRepository,
@@ -23,6 +24,7 @@ from learnova.storage.repositories import (
 from learnova.storage.sqlalchemy_repos import (
     SqlAttemptRepository,
     SqlImageRepository,
+    SqlIssuedQuestionRepository,
     SqlKnowledgeRepository,
     SqlNoteRepository,
     SqlUserRepository,
@@ -40,10 +42,16 @@ class Repositories:
     images: ImageRepository
     knowledge: KnowledgeRepository
     attempts: AttemptRepository
+    issued: IssuedQuestionRepository
 
 
 def make_engine(url: str) -> Engine:
-    engine = create_engine(url)
+    if url.startswith("sqlite"):
+        # The API serves requests on several threads: let connections move between threads
+        # (one thread at a time) and wait up to 30 s for another writer instead of failing.
+        engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30})
+    else:
+        engine = create_engine(url)
     if engine.dialect.name == "sqlite":
         # SQLite ignores foreign keys unless asked, per connection.
         @event.listens_for(engine, "connect")
@@ -81,4 +89,5 @@ def open_repositories(url: str) -> Repositories:
         images=SqlImageRepository(sessions),
         knowledge=SqlKnowledgeRepository(sessions),
         attempts=SqlAttemptRepository(sessions),
+        issued=SqlIssuedQuestionRepository(sessions),
     )

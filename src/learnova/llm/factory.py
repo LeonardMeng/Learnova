@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from learnova.config import ModelSettings
+from learnova.errors import LearnovaError
 from learnova.home import home_dir
 
 if TYPE_CHECKING:
@@ -26,12 +27,14 @@ ALIASES = {"google": "google_genai", "gemini": "google_genai", "google-genai": "
 NOT_YET = {"ollama": "Ollama support is planned but not added yet."}
 
 
-class LLMConfigError(Exception):
+class LLMConfigError(LearnovaError):
     """The model string, config or API key is missing or wrong."""
 
 
-class LLMCallError(Exception):
+class LLMCallError(LearnovaError):
     """The provider returned an error or couldn't be reached."""
+
+    status = 502
 
 
 @dataclass(frozen=True)

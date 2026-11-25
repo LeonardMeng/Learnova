@@ -3,13 +3,50 @@ problems; it never suggests rewritten text."""
 
 from __future__ import annotations
 
-from datetime import datetime
+import re
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
-from learnova.models import KnowledgePoint
+from learnova.errors import NotFoundError
+from learnova.models import KnowledgePoint, Workspace
 from learnova.services.review import NoteResult, PointOutcome, ReviewRun, Status, where
 
 REPORTS_DIR = "reports"
+_SAFE_NAME = re.compile(r"^[\w.-]+\.md$")
+
+
+class NoSuchReport(NotFoundError):
+    pass
+
+
+@dataclass(frozen=True)
+class ReportFile:
+    name: str
+    size: int
+    modified: datetime
+
+
+def list_reports(workspace: Workspace) -> list[ReportFile]:
+    """The workspace's reports, newest first."""
+    folder = workspace.path / REPORTS_DIR
+    if not folder.is_dir():
+        return []
+    files = [f for f in folder.iterdir() if f.is_file() and _SAFE_NAME.match(f.name)]
+    out = [
+        ReportFile(f.name, f.stat().st_size, datetime.fromtimestamp(f.stat().st_mtime, UTC))
+        for f in files
+    ]
+    return sorted(out, key=lambda r: (r.modified, r.name), reverse=True)
+
+
+def read_report(workspace: Workspace, name: str) -> str:
+    """One report's Markdown. Only plain file names inside reports/ are accepted."""
+    folder = (workspace.path / REPORTS_DIR).resolve()
+    path = (folder / name).resolve()
+    if not _SAFE_NAME.match(name) or path.parent != folder or not path.is_file():
+        raise NoSuchReport(f"No report named {name!r}.")
+    return path.read_text(encoding="utf-8")
 
 
 def write_review_report(run: ReviewRun, model_label: str, all_points: list[KnowledgePoint]) -> Path:

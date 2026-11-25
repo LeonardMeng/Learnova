@@ -6,14 +6,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from learnova.config import load_settings
+from learnova.errors import LearnovaError, NotFoundError
 from learnova.models import KnowledgePoint, PointSource
 from learnova.scheduler.mastery import replay
 from learnova.services.review import where
 from learnova.storage.database import Repositories
 
 
-class KnowledgeError(Exception):
-    """A problem worth showing to the user as-is."""
+class KnowledgeError(LearnovaError):
+    pass
+
+
+class NoSuchPoint(KnowledgeError, NotFoundError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -66,7 +71,7 @@ def find_point(repos: Repositories, text: str) -> KnowledgePoint:
     matches = [p for p in points if len(needle) >= 8 and str(p.id).startswith(needle)]
     matches = matches or [p for p in points if p.name.lower() == needle]
     if not matches:
-        raise KnowledgeError(f"No knowledge point named or with id {text!r}.")
+        raise NoSuchPoint(f"No knowledge point named or with id {text!r}.")
     if len(matches) > 1:
         sources = {}
         for s in repos.knowledge.sources(user.id):

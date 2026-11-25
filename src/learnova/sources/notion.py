@@ -15,6 +15,7 @@ import httpx
 from notion_client import Client
 from notion_client.helpers import collect_paginated_api, iterate_paginated_api
 
+from learnova.errors import LearnovaError
 from learnova.models import ImageRef, NoteContent, NoteSummary
 from learnova.sources.base import NoteSource
 from learnova.sources.notion_markdown import MarkdownConverter
@@ -25,7 +26,7 @@ TOKEN_ENV = "NOTION_API_KEY"
 _ID_RE = re.compile(r"[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}", re.I)
 
 
-class NotionConfigError(Exception):
+class NotionConfigError(LearnovaError):
     """Raised when the token or page ID is missing or malformed."""
 
 

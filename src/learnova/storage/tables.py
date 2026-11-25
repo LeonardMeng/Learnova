@@ -170,3 +170,26 @@ class MasteryRow(Base):
     mastery: Mapped[float] = mapped_column(Float)
     review_count: Mapped[int] = mapped_column(Integer)
     last_reviewed: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class IssuedQuestionRow(Base):
+    """Questions handed out by the API (and CLI) and kept until they are answered or skipped."""
+
+    __tablename__ = "issued_questions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    point_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_points.id", ondelete="CASCADE"), index=True
+    )
+    question_type: Mapped[str] = mapped_column(String(32))
+    text: Mapped[str] = mapped_column(Text)
+    options: Mapped[list | None] = mapped_column(JSON)
+    hidden: Mapped[dict] = mapped_column(JSON)
+    notes: Mapped[list] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("attempts.id", ondelete="SET NULL")
+    )

@@ -29,6 +29,6 @@ The full spec is in docs/SPEC.md. Read it before starting any task.
 
 Version 2 (see "Version 2" in docs/SPEC.md):
 - [x] V2.1: Multiple choice and true/false
-- [ ] V2.2: HTTP API (FastAPI)
+- [x] V2.2: HTTP API (FastAPI)
 - [ ] V2.3: Web frontend
 - [ ] V2.4: check-latest

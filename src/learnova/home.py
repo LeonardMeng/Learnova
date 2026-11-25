@@ -44,6 +44,10 @@ DEFAULT_CONFIG = """\
 # short_answer = 1.0
 # multiple_choice = 0.6
 # true_false = 0.3
+
+[api]
+# Browser origins allowed to call `learnova serve` (it only listens on 127.0.0.1).
+# allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
 """
 
 

@@ -18,12 +18,22 @@ class ModelSettings:
     api_key_env: dict[str, str] = field(default_factory=dict)  # provider -> env var name
 
 
+DEFAULT_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")  # the Vite dev server
+
+
+@dataclass(frozen=True)
+class ApiSettings:
+    # Browser origins allowed to call the API (CORS). Anything else is refused by the browser.
+    allowed_origins: tuple[str, ...] = DEFAULT_ORIGINS
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
     models: ModelSettings = field(default_factory=ModelSettings)
     weights: WeightConfig = field(default_factory=WeightConfig)
     mastery: MasteryConfig = field(default_factory=MasteryConfig)
+    api: ApiSettings = field(default_factory=ApiSettings)
 
 
 def load_settings() -> Settings:
@@ -49,5 +59,8 @@ def load_settings() -> Settings:
                 **DEFAULT_TYPE_WEIGHTS,
                 **{k: float(v) for k, v in data.get("mastery", {}).get("type_weights", {}).items()},
             },
+        ),
+        api=ApiSettings(
+            allowed_origins=tuple(data.get("api", {}).get("allowed_origins", DEFAULT_ORIGINS))
         ),
     )

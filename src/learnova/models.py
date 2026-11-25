@@ -150,3 +150,29 @@ class Mastery(BaseModel):
     mastery: float  # 0–1
     review_count: int
     last_reviewed: datetime | None
+
+
+class IssuedStatus(StrEnum):
+    OPEN = "open"
+    ANSWERED = "answered"
+    SKIPPED = "skipped"
+
+
+class IssuedQuestion(BaseModel):
+    """A question that has been asked and is waiting for its answer (or was answered/skipped).
+    `hidden` holds what the asker must not see yet, e.g. the correct option."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    point_id: uuid.UUID
+    question_type: QuestionType
+    text: str
+    options: list[str] | None  # multiple choice / true-false, in the order shown
+    hidden: dict  # correct answer, explanation, ...
+    notes: list[dict]  # [{"path": ..., "text": ...}] the note text the question was written from
+    status: IssuedStatus
+    created_at: datetime
+    closed_at: datetime | None
+    attempt_id: uuid.UUID | None

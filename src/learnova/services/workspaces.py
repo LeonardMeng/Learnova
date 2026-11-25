@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from learnova.errors import ConflictError, LearnovaError, NotFoundError
 from learnova.home import (
     WORKSPACE_FILE,
     WorkspaceFile,
@@ -19,8 +20,16 @@ from learnova.storage.database import Repositories
 from learnova.storage.repositories import WorkspaceNameTaken, WorkspaceNotFound
 
 
-class WorkspaceError(Exception):
-    """A problem worth showing to the user as-is."""
+class WorkspaceError(LearnovaError):
+    pass
+
+
+class NoSuchWorkspace(WorkspaceError, NotFoundError):
+    pass
+
+
+class WorkspaceExists(WorkspaceError, ConflictError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -55,7 +64,7 @@ class WorkspaceService:
         if directory.exists() and not directory.is_dir():
             raise WorkspaceError(f"{directory} exists and is not a directory.")
         if self._repos.workspaces.get_by_name(self.user.id, name) is not None:
-            raise WorkspaceError(f"A workspace named {name!r} already exists.")
+            raise WorkspaceExists(f"A workspace named {name!r} already exists.")
 
         workspace_id = uuid.uuid4()
         directory.mkdir(parents=True, exist_ok=True)
@@ -66,7 +75,7 @@ class WorkspaceService:
             )
         except WorkspaceNameTaken:
             marker.unlink(missing_ok=True)
-            raise WorkspaceError(f"A workspace named {name!r} already exists.") from None
+            raise WorkspaceExists(f"A workspace named {name!r} already exists.") from None
         except Exception:
             marker.unlink(missing_ok=True)
             raise
@@ -87,13 +96,13 @@ class WorkspaceService:
         try:
             return self._repos.workspaces.set_default(self.user.id, name)
         except WorkspaceNotFound:
-            raise WorkspaceError(_not_found(name)) from None
+            raise NoSuchWorkspace(_not_found(name)) from None
 
     def remove(self, name: str) -> Workspace:
         try:
             return self._repos.workspaces.remove(self.user.id, name)
         except WorkspaceNotFound:
-            raise WorkspaceError(_not_found(name)) from None
+            raise NoSuchWorkspace(_not_found(name)) from None
 
     def current(self, cwd: Path | None = None, name: str | None = None) -> Workspace:
         """Which workspace a working command uses: --workspace NAME if given, else the one whose
@@ -101,7 +110,7 @@ class WorkspaceService:
         if name is not None:
             ws = self._repos.workspaces.get_by_name(self.user.id, name)
             if ws is None:
-                raise WorkspaceError(_not_found(name))
+                raise NoSuchWorkspace(_not_found(name))
             return ws
         marker = find_workspace_file(cwd)
         if marker is not None:

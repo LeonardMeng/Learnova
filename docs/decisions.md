@@ -7,3 +7,4 @@
 - 2026-11-25: Weights use fractional days since the last quiz. A point never quizzed counts as `new_point_days` (default 7, in config.toml `[weights]`) so new points are not starved by long-unreviewed ones.
 - 2026-11-25: Milestone 10 (`check-latest`) moved to version 2; version 1 ends at Milestone 9.
 - 2026-11-25: Version 2 scope and order: (1) multiple choice + true/false, graded locally; (2) FastAPI on 127.0.0.1, no auth; (3) React + Vite + TypeScript frontend; (4) check-latest. Folder source and Ollama deferred. See "Version 2" in SPEC.md.
+- 2026-11-25: Quiz questions are stored in `issued_questions` until answered or skipped (open ones expire after 7 days); the CLI and the API both use it. The API listens on 127.0.0.1 only and, having no auth, checks the Host header, requires JSON POST bodies and limits CORS to `[api] allowed_origins`.

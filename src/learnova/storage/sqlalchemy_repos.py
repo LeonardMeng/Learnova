@@ -7,12 +7,14 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from learnova.models import (
     Attempt,
     ImageRef,
+    IssuedQuestion,
+    IssuedStatus,
     KnowledgePoint,
     Mastery,
     Note,
@@ -26,10 +28,12 @@ from learnova.models import (
 from learnova.storage.repositories import (
     AttemptRepository,
     ImageRepository,
+    IssuedQuestionRepository,
     KnowledgeRepository,
     MasteryFn,
     NoteRepository,
     PointNotFound,
+    QuestionAlreadyClosed,
     UserRepository,
     WorkspaceNameTaken,
     WorkspaceNotFound,
@@ -37,6 +41,7 @@ from learnova.storage.repositories import (
 )
 from learnova.storage.tables import (
     AttemptRow,
+    IssuedQuestionRow,
     KnowledgePointRow,
     KpSourceRow,
     MasteryRow,
@@ -409,6 +414,11 @@ class SqlKnowledgeRepository(KnowledgeRepository):
             s.execute(
                 update(AttemptRow).where(AttemptRow.point_id == point_id).values(point_id=into_id)
             )
+            s.execute(
+                update(IssuedQuestionRow)
+                .where(IssuedQuestionRow.point_id == point_id)
+                .values(point_id=into_id)
+            )
             old_mastery = s.get(MasteryRow, point_id)
             if old_mastery is not None:
                 s.delete(old_mastery)
@@ -488,6 +498,7 @@ class SqlAttemptRepository(AttemptRepository):
         created_at,
         mastery_from: MasteryFn,
         question_data=None,
+        issued_question_id=None,
     ) -> tuple[Attempt, Mastery]:
         with self._sessions.begin() as s:
             row = AttemptRow(
@@ -503,6 +514,19 @@ class SqlAttemptRepository(AttemptRepository):
             )
             s.add(row)
             s.flush()
+            if issued_question_id is not None:
+                closed = s.execute(
+                    update(IssuedQuestionRow)
+                    .where(
+                        IssuedQuestionRow.id == issued_question_id,
+                        IssuedQuestionRow.status == IssuedStatus.OPEN.value,
+                    )
+                    .values(
+                        status=IssuedStatus.ANSWERED.value, closed_at=created_at, attempt_id=row.id
+                    )
+                )
+                if closed.rowcount != 1:
+                    raise QuestionAlreadyClosed(str(issued_question_id))  # rolls everything back
             mastery = _rebuild_mastery(s, user_id, point_id, mastery_from)
             return _attempt(row), _mastery(mastery)
 
@@ -519,3 +543,72 @@ class SqlAttemptRepository(AttemptRepository):
         with self._sessions() as s:
             rows = s.scalars(select(MasteryRow).where(MasteryRow.user_id == user_id))
             return {r.point_id: _mastery(r) for r in rows}
+
+
+def _issued(row: IssuedQuestionRow) -> IssuedQuestion:
+    return IssuedQuestion(
+        id=row.id,
+        user_id=row.user_id,
+        point_id=row.point_id,
+        question_type=QuestionType(row.question_type),
+        text=row.text,
+        options=row.options,
+        hidden=row.hidden,
+        notes=row.notes,
+        status=IssuedStatus(row.status),
+        created_at=row.created_at,
+        closed_at=row.closed_at,
+        attempt_id=row.attempt_id,
+    )
+
+
+class SqlIssuedQuestionRepository(IssuedQuestionRepository):
+    def __init__(self, sessions: sessionmaker[Session]):
+        self._sessions = sessions
+
+    def create(
+        self, user_id, point_id, question_type, text, options, hidden, notes, created_at
+    ) -> IssuedQuestion:
+        with self._sessions.begin() as s:
+            row = IssuedQuestionRow(
+                user_id=user_id,
+                point_id=point_id,
+                question_type=QuestionType(question_type).value,
+                text=text,
+                options=options,
+                hidden=hidden,
+                notes=notes,
+                status=IssuedStatus.OPEN.value,
+                created_at=created_at,
+            )
+            s.add(row)
+            s.flush()
+            return _issued(row)
+
+    def get(self, question_id) -> IssuedQuestion | None:
+        with self._sessions() as s:
+            row = s.get(IssuedQuestionRow, question_id)
+            return _issued(row) if row else None
+
+    def skip(self, question_id, closed_at) -> None:
+        with self._sessions.begin() as s:
+            closed = s.execute(
+                update(IssuedQuestionRow)
+                .where(
+                    IssuedQuestionRow.id == question_id,
+                    IssuedQuestionRow.status == IssuedStatus.OPEN.value,
+                )
+                .values(status=IssuedStatus.SKIPPED.value, closed_at=closed_at)
+            )
+            if closed.rowcount != 1:
+                raise QuestionAlreadyClosed(str(question_id))
+
+    def purge_open(self, older_than) -> int:
+        with self._sessions.begin() as s:
+            result = s.execute(
+                delete(IssuedQuestionRow).where(
+                    IssuedQuestionRow.status == IssuedStatus.OPEN.value,
+                    IssuedQuestionRow.created_at < older_than,
+                )
+            )
+            return result.rowcount

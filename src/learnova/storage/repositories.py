@@ -12,6 +12,7 @@ from pathlib import Path
 from learnova.models import (
     Attempt,
     ImageRef,
+    IssuedQuestion,
     KnowledgePoint,
     Mastery,
     Note,
@@ -132,6 +133,10 @@ class PointNotFound(LookupError):
     pass
 
 
+class QuestionAlreadyClosed(LookupError):
+    """The issued question was answered or skipped already (or doesn't exist)."""
+
+
 # Turns (time, score, question type) triples into a mastery state, e.g. scheduler.mastery.replay
 # with the user's settings. Passed in so the repositories don't need to know the mastery rule.
 MasteryFn = Callable[[list[tuple[datetime, float, str]]], MasteryState]
@@ -192,8 +197,11 @@ class AttemptRepository(ABC):
         created_at: datetime,
         mastery_from: MasteryFn,
         question_data: dict | None = None,
+        issued_question_id: uuid.UUID | None = None,
     ) -> tuple[Attempt, Mastery]:
-        """Save the attempt and rebuild the point's mastery, in one transaction."""
+        """Save the attempt and rebuild the point's mastery, in one transaction. With
+        issued_question_id, that question is closed as answered in the same transaction; if it
+        is not open any more, nothing is saved and QuestionAlreadyClosed is raised."""
 
     @abstractmethod
     def list_for_point(self, point_id: uuid.UUID) -> list[Attempt]:
@@ -202,3 +210,29 @@ class AttemptRepository(ABC):
     @abstractmethod
     def mastery(self, user_id: uuid.UUID) -> dict[uuid.UUID, Mastery]:
         """Mastery of every point that has been quizzed, by point id."""
+
+
+class IssuedQuestionRepository(ABC):
+    @abstractmethod
+    def create(
+        self,
+        user_id: uuid.UUID,
+        point_id: uuid.UUID,
+        question_type: QuestionType,
+        text: str,
+        options: list[str] | None,
+        hidden: dict,
+        notes: list[dict],
+        created_at: datetime,
+    ) -> IssuedQuestion: ...
+
+    @abstractmethod
+    def get(self, question_id: uuid.UUID) -> IssuedQuestion | None: ...
+
+    @abstractmethod
+    def skip(self, question_id: uuid.UUID, closed_at: datetime) -> None:
+        """Raises QuestionAlreadyClosed if it isn't open."""
+
+    @abstractmethod
+    def purge_open(self, older_than: datetime) -> int:
+        """Delete open questions created before `older_than`; returns how many."""

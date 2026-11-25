@@ -82,7 +82,7 @@ def test_candidates_across_workspaces_and_filter(repos, tmp_path):
     assert {i.point.name for i in items} == {"RDB vs AOF", "Eviction", "Gradient descent"}
     ml = quiz_service.candidates(repos, NOW, WeightConfig(), "ml")
     assert [i.point.name for i in ml] == ["Gradient descent"]
-    with pytest.raises(quiz_service.QuizError):
+    with pytest.raises(quiz_service.NoSuchWorkspace):
         quiz_service.candidates(repos, NOW, WeightConfig(), "nope")
 
     drawn = quiz_service.draw(items, 5, random.Random(3))
@@ -231,7 +231,8 @@ def test_quiz_and_status_commands(repos, tmp_path, monkeypatch):
     # Answer 1: two lines then an empty line. Answer 2: skip. Then quit.
     r = runner.invoke(app, ["quiz", "--count", "3"], input="RDB is a snapshot\nAOF logs\n\ns\nq\n")
     assert r.exit_code == 0, r.output
-    assert "Quiz: 3 question(s) from 2 workspace(s)" in r.output
+    assert "Quiz: 3 question(s)" in r.output
+    assert "Summary (2 question(s) from 2 workspace(s))" in r.output
     assert "Question 1/3 · " in r.output and "Score 4.5 / 5" in r.output
     assert "Skipped." in r.output and "Question 3/3" in r.output
     assert len(graded) == 1 and graded[0].answer == "RDB is a snapshot\nAOF logs"

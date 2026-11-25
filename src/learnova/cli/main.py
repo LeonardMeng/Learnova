@@ -15,18 +15,16 @@ from rich.table import Table
 from learnova.cli import kp, workspace
 from learnova.cli.common import repositories, short_path, user_errors
 from learnova.config import load_settings
-from learnova.home import WORKSPACE_FILE
 from learnova.llm import factory
 from learnova.models import QuestionType
-from learnova.report import write_review_report
-from learnova.services import images as images_service
 from learnova.services import quiz as quiz_service
 from learnova.services import review as review_service
 from learnova.services import status as status_service
-from learnova.services.workspaces import WorkspaceError, WorkspaceService
+from learnova.services.workspace_sync import run_sync
+from learnova.services.workspaces import WorkspaceService
 from learnova.sources import notion
 from learnova.sources.notion_markdown import PLACEHOLDER_TYPES, SUPPORTED_TYPES
-from learnova.sync import Change, NoteChange, sync_workspace
+from learnova.sync import Change, NoteChange
 
 app = typer.Typer(
     help="Learnova: an AI teaching assistant for your study notes.", no_args_is_help=True
@@ -75,56 +73,42 @@ def sync(
     with user_errors():
         repos = repositories()
         ws = WorkspaceService(repos).current(Path.cwd(), workspace_name)
-        if not (ws.path / WORKSPACE_FILE).is_file():
-            raise WorkspaceError(f"Workspace directory {ws.path} not found (moved or deleted?).")
-        source = notion.NotionSource(notion.make_client(), ws.notion_page_id)
         typer.echo(f"Syncing {ws.name!r} from Notion…")
-        result = sync_workspace(
-            ws, source, repos.notes, repos.images, on_change=_print_change, full=full
+        run = run_sync(
+            repos,
+            ws,
+            full=full,
+            describe=not no_describe,
+            on_change=_print_change,
+            on_describe_start=lambda n, model: typer.echo(
+                f"\nDescribing {n} image(s) with {model}…"
+            ),
+            on_image=lambda img, outcome: typer.echo(
+                f"  {'✓' if outcome != 'failed' else '!'} {img.path} {outcome}"
+            ),
         )
-
+    result = run.result
+    if run.described is not None:
+        typer.echo(f"Images: {run.described.described} described, {run.described.reused} reused.")
+        for error in run.described.errors:
+            typer.secho(f"  ! {error}", fg=typer.colors.YELLOW)
     counts = ", ".join(f"{len(result.of(kind))} {kind}" for kind in Change)
     typer.echo(f"\n{counts}.")
     typer.echo(f"Cache: {short_path(result.cache_dir)}")
     if result.downloaded:
-        typer.echo("Block types (downloaded notes only): " + _block_types(source.block_types))
-    if source.skipped_databases:
-        names = ", ".join(repr(n) for n in source.skipped_databases)
-        typer.echo(f"Skipped {len(source.skipped_databases)} database(s): {names}")
+        typer.echo("Block types (downloaded notes only): " + _block_types(run.block_types))
+    if run.skipped_databases:
+        names = ", ".join(repr(n) for n in run.skipped_databases)
+        typer.echo(f"Skipped {len(run.skipped_databases)} database(s): {names}")
     if result.images_downloaded:
         typer.echo(f"Images: {result.images_downloaded} downloaded")
     for error in result.image_errors:
         typer.secho(f"  ! {error}", fg=typer.colors.YELLOW)
-    if not no_describe:
-        with user_errors():
-            _describe_images(ws, repos)
-
-
-def _describe_images(ws, repos) -> None:
-    pending = images_service.pending_images(repos, ws)
-    if not pending:
-        return
-    settings = load_settings().models
-    try:
-        model = factory.vision_model(settings)
-    except factory.LLMConfigError as e:
+    if run.pending_images and run.not_described_because and not no_describe:
         typer.secho(
-            f"{len(pending)} image(s) waiting for a description. {e}", fg=typer.colors.YELLOW
+            f"{run.pending_images} image(s) waiting for a description. {run.not_described_because}",
+            fg=typer.colors.YELLOW,
         )
-        return
-    typer.echo(f"\nDescribing {len(pending)} image(s) with {settings.vision}…")
-    result = images_service.describe_pending(
-        ws,
-        repos,
-        model,
-        settings.vision,
-        on_image=lambda img, outcome: typer.echo(
-            f"  {'✓' if outcome != 'failed' else '!'} {img.path} {outcome}"
-        ),
-    )
-    typer.echo(f"Images: {result.described} described, {result.reused} reused.")
-    for error in result.errors:
-        typer.secho(f"  ! {error}", fg=typer.colors.YELLOW)
 
 
 def _print_change(change: NoteChange) -> None:
@@ -158,37 +142,33 @@ def review(
     ] = None,
 ) -> None:
     """Extract knowledge points from changed notes and flag errors, gaps and unclear parts."""
-    with user_errors():
-        repos = repositories()
-        ws = WorkspaceService(repos).current(Path.cwd(), workspace_name)
-        notes = review_service.notes_to_review(repos, ws, everything)
-        if not notes:
-            typer.echo(
-                "Nothing to review: no note changed since its last review. "
-                "Run `learnova sync` first, or use --all."
-            )
-            return
-        settings = load_settings().models
-        model = factory.main_model(settings)
-        pending = images_service.pending_images(repos, ws)
+
+    def start(count: int, model: str, pending: int) -> None:
         if pending:
             typer.secho(
-                f"Note: {len(pending)} image(s) have no description yet; run `learnova sync` "
+                f"Note: {pending} image(s) have no description yet; run `learnova sync` "
                 "to describe them. The review won't see what they show.",
                 fg=typer.colors.YELLOW,
             )
-        typer.echo(f"Reviewing {len(notes)} note(s) in {ws.name!r} with {settings.main}…")
-        run = review_service.review_notes(
-            ws,
+        typer.echo(f"Reviewing {count} note(s) in {ws.name!r} with {model}…")
+
+    with user_errors():
+        repos = repositories()
+        ws = WorkspaceService(repos).current(Path.cwd(), workspace_name)
+        outcome = review_service.run_review(
             repos,
-            notes,
-            review_service.llm_reviewer(model),
-            review_service.llm_deduper(model),
+            ws,
+            everything,
+            on_start=start,
             on_note=lambda note, what: typer.echo(f"  {' / '.join(note.path)}: {what}"),
         )
-        user = repos.users.get_or_create_local()
-        path = write_review_report(run, settings.main, repos.knowledge.list_for_user(user.id))
-
+    if outcome is None:
+        typer.echo(
+            "Nothing to review: no note changed since its last review. "
+            "Run `learnova sync` first, or use --all."
+        )
+        return
+    run = outcome.run
     outcomes = [o for r in run.reviewed for o in r.outcomes]
     new = sum(1 for o in outcomes if o.status == review_service.Status.NEW)
     issues = sum(len(r.issues) for r in run.reviewed)
@@ -202,13 +182,20 @@ def review(
         typer.secho(
             f"{len(run.failed)} note(s) failed and will be retried.", fg=typer.colors.YELLOW
         )
-    typer.echo(f"Report: {short_path(path)}")
+    typer.echo(f"Report: {short_path(outcome.report)}")
 
 
 class QuizType(StrEnum):
     short = "short"
     mc = "mc"
     tf = "tf"
+
+
+QUIZ_KINDS = {
+    QuizType.short: QuestionType.SHORT_ANSWER,
+    QuizType.mc: QuestionType.MULTIPLE_CHOICE,
+    QuizType.tf: QuestionType.TRUE_FALSE,
+}
 
 
 @app.command()
@@ -227,150 +214,123 @@ def quiz(
 ) -> None:
     """Answer questions on knowledge points drawn by weight. Short answers are graded by the
     model; multiple choice and true/false are checked locally."""
+    qtype = QUIZ_KINDS[kind]
     rng = random.Random()
     with user_errors():
         repos = repositories()
         if workspace_name is not None:
             WorkspaceService(repos).current(name=workspace_name)  # checks the name exists
         settings = load_settings()
-        items = quiz_service.candidates(repos, datetime.now(UTC), settings.weights, workspace_name)
-        if not items:
-            typer.echo(
-                "No knowledge points to quiz yet. Run `learnova review` in a workspace first."
-            )
-            return
         model = factory.main_model(settings.models)
-        if kind == QuizType.short:
-            quiz_service.load_rubric()  # fail now, not after the first answer
-            ask_one = _short_answer_asker(
-                quiz_service.llm_questioner(model), quiz_service.llm_grader(model)
-            )
-        else:
-            make = (
-                quiz_service.llm_mc_questioner
-                if kind == QuizType.mc
-                else quiz_service.llm_tf_questioner
-            )
-            ask_one = _choice_asker(make(model, rng))
-    drawn = quiz_service.draw(items, count, rng)
-    spaces = len({s.workspace_name for i in drawn for s in i.sources})
+        models = quiz_service.quiz_models(model, qtype, rng)
     how = {
         QuizType.short: "Answer in a few sentences and finish with an empty line.",
         QuizType.mc: "Answer with A, B, C or D.",
         QuizType.tf: "Answer with t (true) or f (false).",
     }[kind]
     typer.echo(
-        f"Quiz: {len(drawn)} question(s) from {spaces} workspace(s) · {settings.models.main}\n"
-        f"{how} Type s to skip, q to quit."
+        f"Quiz: {count} question(s) · {settings.models.main}\n{how} Type s to skip, q to quit."
     )
 
+    asked: set = set()
+    spaces: set[str] = set()
     results = []  # (point name, score or None, mastery before, mastery after)
-    for number, item in enumerate(drawn, 1):
-        notes = quiz_service.note_texts(repos, item)
-        typer.secho(
-            f"\nQuestion {number}/{len(drawn)} · {notes[0].path if notes else ''}", bold=True
-        )
-        outcome = ask_one(repos, item, notes, settings)
+    for number in range(1, count + 1):
+        try:
+            question = quiz_service.issue_question(
+                repos, models, qtype, datetime.now(UTC), settings.weights, rng,
+                workspace_name, asked,
+            )  # fmt: skip
+        except quiz_service.NoPointsLeft as e:
+            typer.echo(f"\n{e}")
+            break
+        except (factory.LLMCallError, quiz_service.InvalidQuestion) as e:
+            typer.secho(f"\nCouldn't write a question: {e}", fg=typer.colors.YELLOW)
+            continue
+        asked.add(question.point_id)
+        source = question.notes[0]["path"] if question.notes else ""
+        spaces.add(source.split(":", 1)[0])
+        typer.secho(f"\nQuestion {number}/{count} · {source}", bold=True)
+        outcome = _ask(repos, models, question, settings)
         if outcome == "quit":
             break
         if outcome is not None:
             results.append(outcome)
 
     if results:
-        typer.echo("\nSummary")
+        typer.echo(f"\nSummary ({len(results)} question(s) from {len(spaces)} workspace(s))")
         for name, score, before, after in results:
             shown = "skipped" if score is None else f"{score:.1f}/5"
             typer.echo(f"  {shown:>7}  {name}  ({before:.2f} → {after:.2f})")
 
 
-def _short_answer_asker(questioner, grader):
-    """One short-answer question: returns a summary row, None (nothing recorded) or "quit"."""
+def _ask(repos, models, question, settings):
+    """Show one issued question, read the answer, grade it. Returns a summary row, None (nothing
+    recorded) or "quit"."""
+    is_short = question.question_type == QuestionType.SHORT_ANSWER
+    is_tf = question.question_type == QuestionType.TRUE_FALSE
+    point = repos.knowledge.get(question.point_id)
+    user = repos.users.get_or_create_local()
+    previous = repos.attempts.mastery(user.id).get(point.id)
+    before = previous.mastery if previous else 0.0
 
-    def ask(repos, item, notes, settings):
-        try:
-            question = questioner(quiz_service.QuestionRequest(item.point, notes))
-        except factory.LLMCallError as e:
-            typer.secho(f"Couldn't write a question: {e}", fg=typer.colors.YELLOW)
-            return None
-        typer.echo(question)
-        answer = _read_answer()
+    typer.echo(f"True or false: {question.text}" if is_tf else question.text)
+    if question.question_type == QuestionType.MULTIPLE_CHOICE:
+        for i, option in enumerate(question.options):
+            typer.echo(f"  {quiz_service.LETTERS[i]}) {option}")
+
+    while True:
+        answer = _read_answer() if is_short else _read_line()
         if answer is None:
             return "quit"
-        before = item.mastery.mastery if item.mastery else 0.0
-        if not answer:
+        if not answer.strip():
+            quiz_service.skip_question(repos, question.id, datetime.now(UTC))
             typer.echo("Skipped.")
-            return (item.point.name, None, before, before)
+            return (point.name, None, before, before)
         try:
-            grade = grader(quiz_service.GradeRequest(item.point, notes, question, answer))
+            result = quiz_service.answer_question(
+                repos, models, question.id, answer, datetime.now(UTC), settings.mastery
+            )
+            break
+        except quiz_service.InvalidAnswer as e:
+            typer.echo(str(e))
         except factory.LLMCallError as e:
             typer.secho(f"Couldn't grade the answer (not recorded): {e}", fg=typer.colors.YELLOW)
             return None
-        _, mastery = quiz_service.record(
-            repos, item, question, answer, grade, datetime.now(UTC), settings.mastery
-        )
-        _print_score(grade.score, item, before, mastery.mastery)
-        typer.echo(grade.feedback.strip())
-        if grade.missing.strip():
-            typer.echo(f"Missing: {grade.missing.strip()}")
-        typer.secho(f"Reference answer: {grade.reference_answer.strip()}", dim=True)
-        return (item.point.name, grade.score, before, mastery.mastery)
 
-    return ask
-
-
-def _choice_asker(questioner):
-    """One multiple-choice or true/false question, graded locally."""
-
-    def ask(repos, item, notes, settings):
-        try:
-            question = questioner(quiz_service.QuestionRequest(item.point, notes))
-        except (factory.LLMCallError, quiz_service.InvalidQuestion) as e:
-            typer.secho(f"Couldn't write a question: {e}", fg=typer.colors.YELLOW)
-            return None
-        is_tf = question.type == QuestionType.TRUE_FALSE
-        typer.echo(f"True or false: {question.text}" if is_tf else question.text)
-        if not is_tf:
-            for i, option in enumerate(question.options):
-                typer.echo(f"  {quiz_service.LETTERS[i]}) {option}")
-        before = item.mastery.mastery if item.mastery else 0.0
-        while True:
-            try:
-                line = input("> ")
-            except EOFError:
-                return "quit"
-            command = line.strip().lower()
-            if command in ("q", "quit"):
-                return "quit"
-            if command in ("s", "skip"):
-                typer.echo("Skipped.")
-                return (item.point.name, None, before, before)
-            chosen = quiz_service.parse_choice(question, line)
-            if chosen is not None:
-                break
-            typer.echo("Answer t or f." if is_tf else "Answer A, B, C or D.")
-        _, mastery = quiz_service.record_choice(
-            repos, item, question, chosen, datetime.now(UTC), settings.mastery
-        )
-        score = quiz_service.grade_choice(question, chosen)
-        right = question.options[question.correct]
-        label = right if is_tf else f"{quiz_service.LETTERS[question.correct]}) {right}"
+    if result.correct is not None:
         typer.secho(
-            "Correct." if score else f"Not quite: the answer is {label}.",
-            fg=typer.colors.GREEN if score else typer.colors.YELLOW,
+            "Correct." if result.correct else f"Not quite: the answer is {result.correct_option}.",
+            fg=typer.colors.GREEN if result.correct else typer.colors.YELLOW,
         )
-        _print_score(score, item, before, mastery.mastery)
-        if question.explanation:
-            typer.echo(question.explanation)
-        return (item.point.name, score, before, mastery.mastery)
-
-    return ask
-
-
-def _print_score(score: float, item, before: float, after: float) -> None:
     typer.secho(
-        f"\nScore {score:.1f} / 5 · {item.point.name} · mastery {before:.2f} → {after:.2f}",
-        fg=typer.colors.GREEN if score >= 3.5 else typer.colors.YELLOW,
+        f"\nScore {result.score:.1f} / 5 · {point.name} · "
+        f"mastery {result.mastery_before:.2f} → {result.mastery_after:.2f}",
+        fg=typer.colors.GREEN if result.score >= 3.5 else typer.colors.YELLOW,
     )
+    if result.feedback:
+        typer.echo(result.feedback)
+    if result.missing:
+        typer.echo(f"Missing: {result.missing}")
+    if result.reference_answer:
+        typer.secho(f"Reference answer: {result.reference_answer}", dim=True)
+    if result.explanation:
+        typer.echo(result.explanation)
+    return (point.name, result.score, result.mastery_before, result.mastery_after)
+
+
+def _read_line() -> str | None:
+    """One line for multiple choice / true-false. "" = skip, None = quit."""
+    try:
+        line = input("> ")
+    except EOFError:
+        return None
+    command = line.strip().lower()
+    if command in ("q", "quit"):
+        return None
+    if command in ("s", "skip"):
+        return ""
+    return line if line.strip() else " "  # an empty line isn't a skip here: ask again
 
 
 def _read_answer() -> str | None:
@@ -452,6 +412,19 @@ def status(
 
 def _when(moment: datetime | None) -> str:
     return moment.astimezone().strftime("%Y-%m-%d %H:%M") if moment else "never"
+
+
+@app.command()
+def serve(
+    port: Annotated[int, typer.Option("--port", "-p", help="Port on 127.0.0.1.")] = 8000,
+) -> None:
+    """Start the HTTP API on 127.0.0.1 (this computer only, no authentication)."""
+    import uvicorn
+
+    from learnova.api.app import create_app
+
+    typer.echo(f"Learnova API on http://127.0.0.1:{port} · interactive docs at /docs")
+    uvicorn.run(create_app(), host="127.0.0.1", port=port, log_level="info")
 
 
 @app.command()

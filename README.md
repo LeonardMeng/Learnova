@@ -37,6 +37,9 @@ The full design is in [docs/SPEC.md](docs/SPEC.md); changed decisions are in
    short_answer = 1.0
    multiple_choice = 0.6
    true_false = 0.3                  # lowest: guessing gets 50%
+
+   [api]                             # optional: browser pages allowed to call `learnova serve`
+   allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
    ```
 
 Learnova reads secrets from environment variables. To load `.env` and run from any directory,
@@ -205,6 +208,28 @@ attempts, its mastery is recomputed from all of them, and the duplicate is remov
 learnova kp merge "GD" --into "Gradient descent"
 ```
 
+### `learnova serve [--port 8000]`
+
+Starts the HTTP API on `127.0.0.1` (this computer only; there is no authentication). Open
+`http://127.0.0.1:8000/docs` to see and try every endpoint. The API calls the same code as the
+commands above, so an answer given over HTTP is recorded exactly like one given in the terminal.
+
+A quiz takes two requests per question: `POST /api/quiz/questions` with
+`{"type": "short" | "mc" | "tf", "workspace": null, "exclude": [point ids asked so far]}` returns
+the question (never its answer), and `POST /api/quiz/questions/{id}/answer` with
+`{"answer": "..."}` grades it. Questions stay open until answered or skipped
+(`POST .../skip`); unanswered ones are removed after 7 days. Sync and review
+(`POST /api/workspaces/{name}/sync`, `.../review`) wait until they finish.
+
+To protect it while it runs without a password, the API only accepts requests addressed to
+`127.0.0.1` or `localhost`, only accepts POST bodies sent as JSON, and only lets browser pages
+from the origins in `[api] allowed_origins` (default: the Vite dev server) call it.
+
+```bash
+learnova serve
+curl http://127.0.0.1:8000/api/status
+```
+
 ### `learnova ask QUESTION [--model PROVIDER:MODEL] [--vision]`
 
 Debugging aid: asks a model one question and prints the reply, time taken and tokens, to check
@@ -229,7 +254,7 @@ learnova ask "hello" --model anthropic:<model-name>
 
 ## Version 2 candidates
 
-`check-latest` (look for recent changes to a knowledge point), Ollama, a FastAPI layer, Postgres,
+A web frontend, `check-latest` (look for recent changes to a knowledge point), Ollama, Postgres,
 a local-folder source, more question types and webhooks. See [docs/SPEC.md](docs/SPEC.md) and
 [docs/decisions.md](docs/decisions.md).
 
