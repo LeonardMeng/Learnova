@@ -53,6 +53,7 @@ class Note(BaseModel):
     last_edited: datetime
     content_hash: str
     synced_at: datetime
+    reviewed_hash: str | None = None  # content_hash at the last review; None = never reviewed
 
 
 class ImageRef(BaseModel):
@@ -86,3 +87,28 @@ class NoteImage(BaseModel):
     mime_type: str | None
     description: str | None
     described_by: str | None  # "provider:model" that wrote the description
+
+
+class KnowledgePoint(BaseModel):
+    """The smallest testable unit. Belongs to the user; linked to one or more notes."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    name: str
+    summary: str
+    importance: int  # 1-5; the AI suggests it once, re-reviews never change it
+    created_at: datetime
+    updated_at: datetime
+
+
+class PointSource(BaseModel):
+    """Where a knowledge point comes from: one note, in one workspace."""
+
+    model_config = ConfigDict(frozen=True)
+
+    point_id: uuid.UUID
+    note_id: uuid.UUID
+    note_path: tuple[str, ...]
+    workspace_name: str

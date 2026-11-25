@@ -10,16 +10,35 @@ from pathlib import Path
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from learnova.models import ImageRef, Note, NoteImage, NoteSummary, User, Workspace
+from learnova.models import (
+    ImageRef,
+    KnowledgePoint,
+    Note,
+    NoteImage,
+    NoteSummary,
+    PointSource,
+    User,
+    Workspace,
+)
 from learnova.storage.repositories import (
     ImageRepository,
+    KnowledgeRepository,
     NoteRepository,
+    PointNotFound,
     UserRepository,
     WorkspaceNameTaken,
     WorkspaceNotFound,
     WorkspaceRepository,
 )
-from learnova.storage.tables import NoteImageRow, NoteRow, UserRow, WorkspaceRow
+from learnova.storage.tables import (
+    KnowledgePointRow,
+    KpSourceRow,
+    NoteImageRow,
+    NoteRow,
+    UserRow,
+    WorkspaceRow,
+    utcnow,
+)
 
 LOCAL_USER_NAME = "local"
 
@@ -50,6 +69,7 @@ def _note(row: NoteRow) -> Note:
         last_edited=row.last_edited_at,
         content_hash=row.content_hash,
         synced_at=row.synced_at,
+        reviewed_hash=row.reviewed_hash,
     )
 
 
@@ -65,6 +85,18 @@ def _image(row: NoteImageRow) -> NoteImage:
         mime_type=row.mime_type,
         description=row.description,
         described_by=row.described_by,
+    )
+
+
+def _point(row: KnowledgePointRow) -> KnowledgePoint:
+    return KnowledgePoint(
+        id=row.id,
+        user_id=row.user_id,
+        name=row.name,
+        summary=row.summary,
+        importance=row.importance,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -197,6 +229,12 @@ class SqlNoteRepository(NoteRepository):
             if row is not None:
                 s.delete(row)
 
+    def mark_reviewed(self, note_id, content_hash) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(NoteRow, note_id)
+            if row is not None:
+                row.reviewed_hash = content_hash
+
     @staticmethod
     def _by_source(s: Session, workspace_id: uuid.UUID, source_id: str) -> NoteRow | None:
         return s.scalars(
@@ -267,3 +305,103 @@ class SqlImageRepository(ImageRepository):
             if row is not None:
                 row.description = description
                 row.described_by = described_by
+
+
+class SqlKnowledgeRepository(KnowledgeRepository):
+    def __init__(self, sessions: sessionmaker[Session]):
+        self._sessions = sessions
+
+    def get(self, point_id) -> KnowledgePoint | None:
+        with self._sessions() as s:
+            row = s.get(KnowledgePointRow, point_id)
+            return _point(row) if row else None
+
+    def list_for_user(self, user_id) -> list[KnowledgePoint]:
+        with self._sessions() as s:
+            rows = s.scalars(
+                select(KnowledgePointRow)
+                .where(KnowledgePointRow.user_id == user_id)
+                .order_by(KnowledgePointRow.created_at)
+            )
+            return [_point(r) for r in rows]
+
+    def list_for_note(self, note_id) -> list[KnowledgePoint]:
+        with self._sessions() as s:
+            rows = s.scalars(
+                select(KnowledgePointRow)
+                .join(KpSourceRow, KpSourceRow.point_id == KnowledgePointRow.id)
+                .where(KpSourceRow.note_id == note_id)
+                .order_by(KnowledgePointRow.created_at)
+            )
+            return [_point(r) for r in rows]
+
+    def sources(self, user_id) -> list[PointSource]:
+        with self._sessions() as s:
+            rows = s.execute(
+                select(KpSourceRow.point_id, NoteRow.id, NoteRow.path, WorkspaceRow.name)
+                .join(NoteRow, NoteRow.id == KpSourceRow.note_id)
+                .join(WorkspaceRow, WorkspaceRow.id == NoteRow.workspace_id)
+                .join(KnowledgePointRow, KnowledgePointRow.id == KpSourceRow.point_id)
+                .where(KnowledgePointRow.user_id == user_id)
+            )
+            return [
+                PointSource(point_id=p, note_id=n, note_path=tuple(path), workspace_name=w)
+                for p, n, path, w in rows
+            ]
+
+    def create(self, user_id, name, summary, importance) -> KnowledgePoint:
+        with self._sessions.begin() as s:
+            row = KnowledgePointRow(
+                user_id=user_id, name=name, summary=summary, importance=importance
+            )
+            s.add(row)
+            s.flush()
+            return _point(row)
+
+    def update(self, point_id, name, summary) -> KnowledgePoint:
+        with self._sessions.begin() as s:
+            row = s.get(KnowledgePointRow, point_id)
+            if row is None:
+                raise PointNotFound(str(point_id))
+            row.name, row.summary, row.updated_at = name, summary, utcnow()
+            s.flush()
+            return _point(row)
+
+    def set_importance(self, point_id, importance) -> KnowledgePoint:
+        with self._sessions.begin() as s:
+            row = s.get(KnowledgePointRow, point_id)
+            if row is None:
+                raise PointNotFound(str(point_id))
+            row.importance, row.updated_at = importance, utcnow()
+            s.flush()
+            return _point(row)
+
+    def link(self, point_id, note_id) -> None:
+        with self._sessions.begin() as s:
+            if s.get(KpSourceRow, (point_id, note_id)) is None:
+                s.add(KpSourceRow(point_id=point_id, note_id=note_id))
+
+    def unlink(self, point_id, note_id) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(KpSourceRow, (point_id, note_id))
+            if row is not None:
+                s.delete(row)
+
+    def merge(self, point_id, into_id) -> KnowledgePoint:
+        with self._sessions.begin() as s:
+            point, into = s.get(KnowledgePointRow, point_id), s.get(KnowledgePointRow, into_id)
+            if point is None or into is None:
+                raise PointNotFound(str(point_id if point is None else into_id))
+            kept_notes = set(
+                s.scalars(select(KpSourceRow.note_id).where(KpSourceRow.point_id == into_id))
+            )
+            for link in s.scalars(select(KpSourceRow).where(KpSourceRow.point_id == point_id)):
+                if link.note_id not in kept_notes:
+                    s.add(KpSourceRow(point_id=into_id, note_id=link.note_id))
+                s.delete(link)
+            # Milestone 9: also move point_id's attempts here and recompute into's mastery.
+            s.flush()
+            s.delete(point)
+            into.updated_at = utcnow()
+            s.flush()
+            return _point(into)

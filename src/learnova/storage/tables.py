@@ -10,6 +10,7 @@ from sqlalchemy import (
     JSON,
     DateTime,
     ForeignKey,
+    Integer,
     MetaData,
     String,
     Text,
@@ -92,6 +93,7 @@ class NoteRow(Base):
     last_edited_at: Mapped[datetime] = mapped_column(UTCDateTime)
     content_hash: Mapped[str] = mapped_column(String(64))  # sha256 of the Markdown body
     synced_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    reviewed_hash: Mapped[str | None] = mapped_column(String(64))  # content_hash at last review
 
 
 class NoteImageRow(Base):
@@ -108,3 +110,28 @@ class NoteImageRow(Base):
     mime_type: Mapped[str | None] = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(Text)
     described_by: Mapped[str | None] = mapped_column(String(200))
+
+
+class KnowledgePointRow(Base):
+    __tablename__ = "knowledge_points"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(300))
+    summary: Mapped[str] = mapped_column(Text)
+    importance: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class KpSourceRow(Base):
+    """Links a knowledge point to a note. Deleting either side removes only the link."""
+
+    __tablename__ = "kp_sources"
+
+    point_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_points.id", ondelete="CASCADE"), primary_key=True
+    )
+    note_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True, index=True
+    )

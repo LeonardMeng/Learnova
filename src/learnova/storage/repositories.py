@@ -8,7 +8,16 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 
-from learnova.models import ImageRef, Note, NoteImage, NoteSummary, User, Workspace
+from learnova.models import (
+    ImageRef,
+    KnowledgePoint,
+    Note,
+    NoteImage,
+    NoteSummary,
+    PointSource,
+    User,
+    Workspace,
+)
 
 
 class WorkspaceNotFound(LookupError):
@@ -80,6 +89,9 @@ class NoteRepository(ABC):
     def delete(self, workspace_id: uuid.UUID, source_id: str) -> None:
         """Remove the note if it exists."""
 
+    @abstractmethod
+    def mark_reviewed(self, note_id: uuid.UUID, content_hash: str) -> None: ...
+
 
 class ImageRepository(ABC):
     @abstractmethod
@@ -109,3 +121,46 @@ class ImageRepository(ABC):
 
     @abstractmethod
     def set_description(self, image_id: uuid.UUID, description: str, described_by: str) -> None: ...
+
+
+class PointNotFound(LookupError):
+    pass
+
+
+class KnowledgeRepository(ABC):
+    @abstractmethod
+    def get(self, point_id: uuid.UUID) -> KnowledgePoint | None: ...
+
+    @abstractmethod
+    def list_for_user(self, user_id: uuid.UUID) -> list[KnowledgePoint]: ...
+
+    @abstractmethod
+    def list_for_note(self, note_id: uuid.UUID) -> list[KnowledgePoint]: ...
+
+    @abstractmethod
+    def sources(self, user_id: uuid.UUID) -> list[PointSource]:
+        """Every (point, note) link of the user's points, with note path and workspace name."""
+
+    @abstractmethod
+    def create(
+        self, user_id: uuid.UUID, name: str, summary: str, importance: int
+    ) -> KnowledgePoint: ...
+
+    @abstractmethod
+    def update(self, point_id: uuid.UUID, name: str, summary: str) -> KnowledgePoint:
+        """Change name and summary; importance is left alone."""
+
+    @abstractmethod
+    def set_importance(self, point_id: uuid.UUID, importance: int) -> KnowledgePoint: ...
+
+    @abstractmethod
+    def link(self, point_id: uuid.UUID, note_id: uuid.UUID) -> None:
+        """Idempotent."""
+
+    @abstractmethod
+    def unlink(self, point_id: uuid.UUID, note_id: uuid.UUID) -> None: ...
+
+    @abstractmethod
+    def merge(self, point_id: uuid.UUID, into_id: uuid.UUID) -> KnowledgePoint:
+        """Move point_id's links onto into_id and delete point_id, in one transaction.
+        Raises PointNotFound."""

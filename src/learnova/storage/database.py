@@ -14,12 +14,14 @@ from sqlalchemy.pool import NullPool
 
 from learnova.storage.repositories import (
     ImageRepository,
+    KnowledgeRepository,
     NoteRepository,
     UserRepository,
     WorkspaceRepository,
 )
 from learnova.storage.sqlalchemy_repos import (
     SqlImageRepository,
+    SqlKnowledgeRepository,
     SqlNoteRepository,
     SqlUserRepository,
     SqlWorkspaceRepository,
@@ -34,6 +36,7 @@ class Repositories:
     workspaces: WorkspaceRepository
     notes: NoteRepository
     images: ImageRepository
+    knowledge: KnowledgeRepository
 
 
 def make_engine(url: str) -> Engine:
@@ -73,4 +76,5 @@ def open_repositories(url: str) -> Repositories:
         workspaces=SqlWorkspaceRepository(sessions),
         notes=SqlNoteRepository(sessions),
         images=SqlImageRepository(sessions),
+        knowledge=SqlKnowledgeRepository(sessions),
     )

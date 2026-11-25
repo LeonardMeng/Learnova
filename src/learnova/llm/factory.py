@@ -121,3 +121,13 @@ def ask(model: BaseChatModel, question: str | list) -> Answer:
         input_tokens=usage.get("input_tokens"),
         output_tokens=usage.get("output_tokens"),
     )
+
+
+def ask_structured(model: BaseChatModel, schema: type, prompt: str):
+    """Ask for an answer shaped like `schema` (a Pydantic model) and get an instance back.
+    LangChain turns the schema into each provider's structured-output format."""
+    try:
+        return model.with_structured_output(schema).invoke(prompt)
+    except Exception as e:
+        message = str(e).strip().splitlines()[0][:300] if str(e).strip() else ""
+        raise LLMCallError(f"{type(e).__name__}: {message}") from e

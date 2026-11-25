@@ -7,12 +7,14 @@ from typing import Annotated
 
 import typer
 
-from learnova.cli import workspace
+from learnova.cli import kp, workspace
 from learnova.cli.common import repositories, short_path, user_errors
 from learnova.config import load_settings
 from learnova.home import WORKSPACE_FILE
 from learnova.llm import factory
+from learnova.report import write_review_report
 from learnova.services import images as images_service
+from learnova.services import review as review_service
 from learnova.services.workspaces import WorkspaceError, WorkspaceService
 from learnova.sources import notion
 from learnova.sources.notion_markdown import PLACEHOLDER_TYPES, SUPPORTED_TYPES
@@ -22,6 +24,7 @@ app = typer.Typer(
     help="Learnova: an AI teaching assistant for your study notes.", no_args_is_help=True
 )
 app.add_typer(workspace.app, name="workspace")
+app.add_typer(kp.app, name="kp")
 
 
 @app.command()
@@ -134,6 +137,64 @@ def _block_types(counts) -> str:
         return btype
 
     return ", ".join(f"{label(t)} {n}" for t, n in counts.most_common()) or "(none)"
+
+
+@app.command()
+def review(
+    everything: Annotated[
+        bool, typer.Option("--all", help="Review every note, not only changed ones.")
+    ] = False,
+    workspace_name: Annotated[
+        str | None,
+        typer.Option("--workspace", "-w", help="Workspace name. Default: the one you're in."),
+    ] = None,
+) -> None:
+    """Extract knowledge points from changed notes and flag errors, gaps and unclear parts."""
+    with user_errors():
+        repos = repositories()
+        ws = WorkspaceService(repos).current(Path.cwd(), workspace_name)
+        notes = review_service.notes_to_review(repos, ws, everything)
+        if not notes:
+            typer.echo(
+                "Nothing to review: no note changed since its last review. "
+                "Run `learnova sync` first, or use --all."
+            )
+            return
+        settings = load_settings().models
+        model = factory.main_model(settings)
+        pending = images_service.pending_images(repos, ws)
+        if pending:
+            typer.secho(
+                f"Note: {len(pending)} image(s) have no description yet; run `learnova sync` "
+                "to describe them. The review won't see what they show.",
+                fg=typer.colors.YELLOW,
+            )
+        typer.echo(f"Reviewing {len(notes)} note(s) in {ws.name!r} with {settings.main}…")
+        run = review_service.review_notes(
+            ws,
+            repos,
+            notes,
+            review_service.llm_reviewer(model),
+            review_service.llm_deduper(model),
+            on_note=lambda note, what: typer.echo(f"  {' / '.join(note.path)}: {what}"),
+        )
+        user = repos.users.get_or_create_local()
+        path = write_review_report(run, settings.main, repos.knowledge.list_for_user(user.id))
+
+    outcomes = [o for r in run.reviewed for o in r.outcomes]
+    new = sum(1 for o in outcomes if o.status == review_service.Status.NEW)
+    issues = sum(len(r.issues) for r in run.reviewed)
+    missing = sum(len(r.missing) for r in run.reviewed)
+    dups = sum(1 for o in outcomes if o.possible_duplicate)
+    typer.echo(
+        f"\n{len(run.reviewed)} reviewed · {new} new point(s) · {issues} issue(s) · "
+        f"{missing} missing topic(s)" + (f" · {dups} possible duplicate(s)" if dups else "")
+    )
+    if run.failed:
+        typer.secho(
+            f"{len(run.failed)} note(s) failed and will be retried.", fg=typer.colors.YELLOW
+        )
+    typer.echo(f"Report: {short_path(path)}")
 
 
 @app.command()
