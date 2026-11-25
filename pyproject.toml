@@ -5,8 +5,13 @@ description = "An AI teaching assistant for your study notes."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.20.1",
     "httpx>=0.28.1",
     "notion-client>=3.1.0",
+    "pydantic>=2.14.4",
+    "rich>=15.0.0",
+    "sqlalchemy>=2.1.9",
+    "tomli-w>=1.2.0",
     "typer>=0.29.2",
 ]
 

@@ -17,3 +17,4 @@ The full spec is in docs/SPEC.md. Read it before starting any task.
 
 ## Progress
 - [x] Milestone 1: Connect to Notion
+- [x] Milestone 2: User home and data layer
