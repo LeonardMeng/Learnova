@@ -14,6 +14,7 @@ The full spec is in docs/SPEC.md. Read it before starting any task.
 ## Commands
 - Run tests: uv run pytest
 - Lint: uv run ruff check .
+- Web app (in frontend/): npm test, npm run typecheck, npm run build; npm run gen:api after API changes
 
 ## Progress
 - [x] Milestone 1: Connect to Notion
@@ -30,5 +31,5 @@ The full spec is in docs/SPEC.md. Read it before starting any task.
 Version 2 (see "Version 2" in docs/SPEC.md):
 - [x] V2.1: Multiple choice and true/false
 - [x] V2.2: HTTP API (FastAPI)
-- [ ] V2.3: Web frontend
-- [ ] V2.4: check-latest
+- [x] V2.3: Web frontend
+- [ ] V2.4: check-latest: deferred beyond version 2

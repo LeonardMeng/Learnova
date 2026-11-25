@@ -6,11 +6,13 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from notion_client.errors import APIResponseError, RequestTimeoutError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -97,7 +99,37 @@ def create_app(repos_factory: Callable[[], Repositories] | None = None) -> FastA
 
     for module in (workspaces, points, status, quiz):
         app.include_router(module.router)
+    _serve_frontend(app)
     return app
+
+
+def find_frontend(start: Path | None = None) -> Path | None:
+    """frontend/dist in the Learnova project this code runs from, once `npm run build` ran."""
+    here = (start or Path(__file__)).resolve()
+    for directory in here.parents:
+        dist = directory / "frontend" / "dist"
+        if (dist / "index.html").is_file():
+            return dist
+    return None
+
+
+def _serve_frontend(app: FastAPI, dist: Path | None = None) -> None:
+    """Serve the built web app at / (with its assets), so `learnova serve` is all you need.
+    Any path that isn't an API route or a file gets index.html: the app's router handles it."""
+    dist = dist or find_frontend()
+    if dist is None:
+        return
+    if (dist / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def frontend(path: str):
+        if path == "api" or path.startswith("api/"):
+            return JSONResponse({"error": "No such API endpoint.", "code": "NotFound"}, 404)
+        file = (dist / path).resolve()
+        if path and file.is_file() and file.is_relative_to(dist.resolve()):
+            return FileResponse(file)
+        return FileResponse(dist / "index.html")
 
 
 # --- dependencies --------------------------------------------------------------------------

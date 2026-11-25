@@ -1,0 +1,1757 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Learnova",
+    "summary": "Your study notes, reviewed and quizzed. Local use only: no authentication.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces": {
+      "get": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "List Workspaces",
+        "operationId": "list_workspaces_api_workspaces_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Workspaces Api Workspaces Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Create Workspace",
+        "operationId": "create_workspace_api_workspaces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedWorkspaceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{name}/default": {
+      "put": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Set Default",
+        "operationId": "set_default_api_workspaces__name__default_put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{name}": {
+      "delete": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Remove Workspace",
+        "operationId": "remove_workspace_api_workspaces__name__delete",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemovedWorkspaceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{name}/sync": {
+      "post": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Sync",
+        "operationId": "sync_api_workspaces__name__sync_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{name}/review": {
+      "post": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Review",
+        "operationId": "review_api_workspaces__name__review_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{name}/reports": {
+      "get": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Reports",
+        "operationId": "reports_api_workspaces__name__reports_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportFileOut"
+                  },
+                  "title": "Response Reports Api Workspaces  Name  Reports Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{name}/reports/{file}": {
+      "get": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Report",
+        "operationId": "report_api_workspaces__name__reports__file__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/points": {
+      "get": {
+        "tags": [
+          "knowledge points"
+        ],
+        "summary": "List Points",
+        "operationId": "list_points_api_points_get",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PointOut"
+                  },
+                  "title": "Response List Points Api Points Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/points/{point_id}": {
+      "get": {
+        "tags": [
+          "knowledge points"
+        ],
+        "summary": "Get Point",
+        "operationId": "get_point_api_points__point_id__get",
+        "parameters": [
+          {
+            "name": "point_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Point Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "knowledge points"
+        ],
+        "summary": "Set Importance",
+        "operationId": "set_importance_api_points__point_id__patch",
+        "parameters": [
+          {
+            "name": "point_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Point Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportanceIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/points/{point_id}/merge": {
+      "post": {
+        "tags": [
+          "knowledge points"
+        ],
+        "summary": "Merge",
+        "operationId": "merge_api_points__point_id__merge_post",
+        "parameters": [
+          {
+            "name": "point_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Point Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergeOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Get Status",
+        "operationId": "get_status_api_status_get",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace"
+            }
+          },
+          {
+            "name": "weakest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 10,
+              "title": "Weakest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quiz/questions": {
+      "post": {
+        "tags": [
+          "quiz"
+        ],
+        "summary": "Issue",
+        "operationId": "issue_api_quiz_questions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quiz/questions/{question_id}": {
+      "get": {
+        "tags": [
+          "quiz"
+        ],
+        "summary": "Get",
+        "operationId": "get_api_quiz_questions__question_id__get",
+        "parameters": [
+          {
+            "name": "question_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Question Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quiz/questions/{question_id}/answer": {
+      "post": {
+        "tags": [
+          "quiz"
+        ],
+        "summary": "Answer",
+        "operationId": "answer_api_quiz_questions__question_id__answer_post",
+        "parameters": [
+          {
+            "name": "question_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Question Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quiz/questions/{question_id}/skip": {
+      "post": {
+        "tags": [
+          "quiz"
+        ],
+        "summary": "Skip",
+        "operationId": "skip_api_quiz_questions__question_id__skip_post",
+        "parameters": [
+          {
+            "name": "question_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Question Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkippedOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnswerIn": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer",
+            "description": "Text for short answers; A\u2013D for mc; t/f for tf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer"
+        ],
+        "title": "AnswerIn"
+      },
+      "AnswerOut": {
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Question Id"
+          },
+          "point": {
+            "$ref": "#/components/schemas/PointRefOut"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct"
+          },
+          "correct_option": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option"
+          },
+          "feedback": {
+            "type": "string",
+            "title": "Feedback"
+          },
+          "missing": {
+            "type": "string",
+            "title": "Missing"
+          },
+          "reference_answer": {
+            "type": "string",
+            "title": "Reference Answer"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "mastery_before": {
+            "type": "number",
+            "title": "Mastery Before"
+          },
+          "mastery_after": {
+            "type": "number",
+            "title": "Mastery After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_id",
+          "point",
+          "score",
+          "correct",
+          "correct_option",
+          "feedback",
+          "missing",
+          "reference_answer",
+          "explanation",
+          "mastery_before",
+          "mastery_after"
+        ],
+        "title": "AnswerOut"
+      },
+      "ChangeOut": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "previous_path": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "path"
+        ],
+        "title": "ChangeOut"
+      },
+      "CreatedWorkspaceOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "notion_page_id": {
+            "type": "string",
+            "title": "Notion Page Id"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "found": {
+            "type": "boolean",
+            "title": "Found"
+          },
+          "notion_title": {
+            "type": "string",
+            "title": "Notion Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "notion_page_id",
+          "is_default",
+          "found",
+          "notion_title"
+        ],
+        "title": "CreatedWorkspaceOut"
+      },
+      "FailedNoteOut": {
+        "properties": {
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "error"
+        ],
+        "title": "FailedNoteOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ImportanceIn": {
+        "properties": {
+          "importance": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Importance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "importance"
+        ],
+        "title": "ImportanceIn"
+      },
+      "MergeIn": {
+        "properties": {
+          "into": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Into"
+          }
+        },
+        "type": "object",
+        "required": [
+          "into"
+        ],
+        "title": "MergeIn"
+      },
+      "MergeOut": {
+        "properties": {
+          "kept": {
+            "$ref": "#/components/schemas/PointOut"
+          },
+          "removed": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Removed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kept",
+          "removed"
+        ],
+        "title": "MergeOut"
+      },
+      "PointOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "importance": {
+            "type": "integer",
+            "title": "Importance"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "mastery": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mastery"
+          },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count"
+          },
+          "last_reviewed": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "summary",
+          "importance",
+          "sources",
+          "mastery",
+          "review_count",
+          "last_reviewed"
+        ],
+        "title": "PointOut"
+      },
+      "PointRefOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "PointRefOut"
+      },
+      "QuestionIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "short",
+              "mc",
+              "tf"
+            ],
+            "title": "Type",
+            "default": "short"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          },
+          "exclude": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Exclude",
+            "description": "Points already asked in this session",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "QuestionIn"
+      },
+      "QuestionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "short",
+              "mc",
+              "tf"
+            ],
+            "title": "Type"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "point_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Point Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "answered",
+              "skipped"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "text",
+          "options",
+          "source",
+          "point_id",
+          "status",
+          "created_at"
+        ],
+        "title": "QuestionOut",
+        "description": "Never contains the correct answer or the point's name."
+      },
+      "RemovedWorkspaceOut": {
+        "properties": {
+          "removed": {
+            "type": "string",
+            "title": "Removed"
+          },
+          "was_default": {
+            "type": "boolean",
+            "title": "Was Default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "removed",
+          "was_default"
+        ],
+        "title": "RemovedWorkspaceOut"
+      },
+      "ReportFileOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "modified": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Modified"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "size",
+          "modified"
+        ],
+        "title": "ReportFileOut"
+      },
+      "ReportOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "markdown": {
+            "type": "string",
+            "title": "Markdown"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "markdown"
+        ],
+        "title": "ReportOut"
+      },
+      "ReviewIn": {
+        "properties": {
+          "all": {
+            "type": "boolean",
+            "title": "All",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ReviewIn"
+      },
+      "ReviewOut": {
+        "properties": {
+          "nothing_to_review": {
+            "type": "boolean",
+            "title": "Nothing To Review"
+          },
+          "reviewed": {
+            "type": "integer",
+            "title": "Reviewed",
+            "default": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped",
+            "default": 0
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/FailedNoteOut"
+            },
+            "type": "array",
+            "title": "Failed",
+            "default": []
+          },
+          "new_points": {
+            "type": "integer",
+            "title": "New Points",
+            "default": 0
+          },
+          "issues": {
+            "type": "integer",
+            "title": "Issues",
+            "default": 0
+          },
+          "missing_topics": {
+            "type": "integer",
+            "title": "Missing Topics",
+            "default": 0
+          },
+          "possible_duplicates": {
+            "type": "integer",
+            "title": "Possible Duplicates",
+            "default": 0
+          },
+          "report": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "pending_images": {
+            "type": "integer",
+            "title": "Pending Images",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "nothing_to_review"
+        ],
+        "title": "ReviewOut"
+      },
+      "SkippedOut": {
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Question Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "skipped",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_id",
+          "status"
+        ],
+        "title": "SkippedOut"
+      },
+      "SourceOut": {
+        "properties": {
+          "workspace": {
+            "type": "string",
+            "title": "Workspace"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace",
+          "path"
+        ],
+        "title": "SourceOut"
+      },
+      "StatusOut": {
+        "properties": {
+          "overall": {
+            "$ref": "#/components/schemas/SummaryOut"
+          },
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/SummaryOut"
+            },
+            "type": "array",
+            "title": "Workspaces"
+          },
+          "weakest": {
+            "items": {
+              "$ref": "#/components/schemas/WeakPointOut"
+            },
+            "type": "array",
+            "title": "Weakest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "overall",
+          "workspaces",
+          "weakest"
+        ],
+        "title": "StatusOut"
+      },
+      "SummaryOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points"
+          },
+          "quizzed": {
+            "type": "integer",
+            "title": "Quizzed"
+          },
+          "average_mastery": {
+            "type": "number",
+            "title": "Average Mastery"
+          },
+          "last_quiz": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Quiz"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "points",
+          "quizzed",
+          "average_mastery",
+          "last_quiz"
+        ],
+        "title": "SummaryOut"
+      },
+      "SyncIn": {
+        "properties": {
+          "full": {
+            "type": "boolean",
+            "title": "Full",
+            "default": false
+          },
+          "describe": {
+            "type": "boolean",
+            "title": "Describe",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "SyncIn"
+      },
+      "SyncOut": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeOut"
+            },
+            "type": "array",
+            "title": "Changes"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts"
+          },
+          "notes_downloaded": {
+            "type": "integer",
+            "title": "Notes Downloaded"
+          },
+          "images_downloaded": {
+            "type": "integer",
+            "title": "Images Downloaded"
+          },
+          "image_errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Image Errors"
+          },
+          "block_types": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Block Types"
+          },
+          "skipped_databases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped Databases"
+          },
+          "images_described": {
+            "type": "integer",
+            "title": "Images Described"
+          },
+          "images_reused": {
+            "type": "integer",
+            "title": "Images Reused"
+          },
+          "describe_errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Describe Errors"
+          },
+          "pending_images": {
+            "type": "integer",
+            "title": "Pending Images"
+          },
+          "not_described_because": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not Described Because"
+          }
+        },
+        "type": "object",
+        "required": [
+          "changes",
+          "counts",
+          "notes_downloaded",
+          "images_downloaded",
+          "image_errors",
+          "block_types",
+          "skipped_databases",
+          "images_described",
+          "images_reused",
+          "describe_errors",
+          "pending_images",
+          "not_described_because"
+        ],
+        "title": "SyncOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WeakPointOut": {
+        "properties": {
+          "point": {
+            "$ref": "#/components/schemas/PointOut"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight"
+          }
+        },
+        "type": "object",
+        "required": [
+          "point",
+          "weight"
+        ],
+        "title": "WeakPointOut"
+      },
+      "WorkspaceIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "notion_page": {
+            "type": "string",
+            "title": "Notion Page",
+            "description": "Notion page ID or URL"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Workspace directory; created if missing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "notion_page",
+          "path"
+        ],
+        "title": "WorkspaceIn"
+      },
+      "WorkspaceOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "notion_page_id": {
+            "type": "string",
+            "title": "Notion Page Id"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "found": {
+            "type": "boolean",
+            "title": "Found"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "notion_page_id",
+          "is_default",
+          "found"
+        ],
+        "title": "WorkspaceOut"
+      }
+    }
+  }
+}

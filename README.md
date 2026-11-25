@@ -230,6 +230,32 @@ learnova serve
 curl http://127.0.0.1:8000/api/status
 ```
 
+## Web app
+
+A browser interface on top of the API, in `frontend/` (React + Vite + TypeScript). Pages:
+
+- **Quiz**: short answer, multiple choice or true/false; answer with the keyboard (A–D, T/F,
+  Ctrl/⌘+Enter); a reload continues the current question.
+- **Status**: totals per workspace, your weakest points, and every point with its mastery;
+  importance can be changed in place.
+- **Reports**: read review reports, and run Sync and Review for the workspace.
+
+The workspace picker in the header applies to every page.
+
+One-time setup (needs Node 20+):
+
+```bash
+cd frontend
+npm ci
+npm run build          # writes frontend/dist, which `learnova serve` serves
+```
+
+Then `learnova serve` and open http://127.0.0.1:8000. To work on the frontend itself, run
+`learnova serve` and `npm run dev` together and open http://localhost:5173 (it forwards `/api`
+to the server). After changing the API, run `npm run gen:api` to regenerate the TypeScript
+types; a Python test fails until you do. Frontend tests: `npm test`; type check:
+`npm run typecheck`.
+
 ### `learnova ask QUESTION [--model PROVIDER:MODEL] [--vision]`
 
 Debugging aid: asks a model one question and prints the reply, time taken and tokens, to check
@@ -254,7 +280,7 @@ learnova ask "hello" --model anthropic:<model-name>
 
 ## Version 2 candidates
 
-A web frontend, `check-latest` (look for recent changes to a knowledge point), Ollama, Postgres,
+`check-latest` (look for recent changes to a knowledge point), Ollama, Postgres,
 a local-folder source, more question types and webhooks. See [docs/SPEC.md](docs/SPEC.md) and
 [docs/decisions.md](docs/decisions.md).
 
@@ -263,4 +289,5 @@ a local-folder source, more question types and webhooks. See [docs/SPEC.md](docs
 ```bash
 uv run pytest          # tests (no network or model calls)
 uv run ruff check .    # lint
+cd frontend && npm test && npm run typecheck   # web app
 ```

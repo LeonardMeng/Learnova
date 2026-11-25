@@ -37,7 +37,19 @@ def list_reports(workspace: Workspace) -> list[ReportFile]:
         ReportFile(f.name, f.stat().st_size, datetime.fromtimestamp(f.stat().st_mtime, UTC))
         for f in files
     ]
-    return sorted(out, key=lambda r: (r.modified, r.name), reverse=True)
+    return sorted(out, key=_report_order, reverse=True)
+
+
+_REVIEW_NAME = re.compile(r"^(\d{4}-\d{2}-\d{2})-review(?:-(\d+))?\.md$")
+
+
+def _report_order(r: ReportFile) -> tuple:
+    """Order by the date and run number in the name (review, review-2, …, review-10); file
+    times can be reset by copying, so they only order files with other names."""
+    m = _REVIEW_NAME.match(r.name)
+    if m:
+        return (m[1], int(m[2] or 1), r.modified)
+    return (r.modified.date().isoformat(), 0, r.modified)
 
 
 def read_report(workspace: Workspace, name: str) -> str:

@@ -296,3 +296,57 @@ def test_merge_moves_open_questions_and_old_ones_expire(client, repos, points, f
                               None, {}, [], datetime.now(UTC) - timedelta(days=8))  # fmt: skip
     client.post("/api/quiz/questions", json={})  # issuing purges week-old open questions
     assert repos.issued.get(old.id) is None
+
+
+def test_serves_the_built_frontend(tmp_path, repos):
+    from learnova.api.app import _serve_frontend
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<div id=root></div>")
+    (dist / "assets" / "app.js").write_text("console.log(1)")
+    (dist / "favicon.svg").write_text("<svg/>")
+    (tmp_path / "secret.txt").write_text("no")
+    app = create_app(lambda: repos)
+    _serve_frontend(app, dist)
+    client = TestClient(app, base_url=BASE)
+
+    assert client.get("/").text == "<div id=root></div>"
+    assert client.get("/quiz").text == "<div id=root></div>"  # the app's own routes
+    assert client.get("/assets/app.js").text == "console.log(1)"
+    assert client.get("/favicon.svg").text == "<svg/>"
+    assert client.get("/../secret.txt").text == "<div id=root></div>"
+    assert client.get("/api/nope").status_code == 404
+    assert client.get("/api/health").json() == {"status": "ok"}  # API routes still win
+
+
+def test_reports_are_ordered_by_name_not_file_time(tmp_path):
+    import os
+
+    from learnova.models import Workspace
+    from learnova.report import list_reports
+
+    folder = tmp_path / "reports"
+    folder.mkdir()
+    names = ["2026-11-24-review.md", "2026-11-25-review.md", "2026-11-25-review-2.md",
+             "2026-11-25-review-10.md"]  # fmt: skip
+    for i, name in enumerate(names):
+        (folder / name).write_text("x")
+        os.utime(folder / name, (1_000_000 - i, 1_000_000 - i))  # times in the wrong order
+    ws = Workspace(id="00000000-0000-0000-0000-000000000001",
+                   user_id="00000000-0000-0000-0000-000000000002", name="w", notion_page_id="p",
+                   path=tmp_path, is_default=True, created_at=datetime.now(UTC))  # fmt: skip
+    assert [r.name for r in list_reports(ws)] == [
+        "2026-11-25-review-10.md", "2026-11-25-review-2.md", "2026-11-25-review.md",
+        "2026-11-24-review.md",
+    ]  # fmt: skip
+
+
+def test_frontend_api_description_is_up_to_date():
+    """frontend/openapi.json (and the types generated from it) must match the API. If this fails,
+    run `npm run gen:api` in frontend/."""
+    from pathlib import Path
+
+    saved = Path(__file__).parents[1] / "frontend" / "openapi.json"
+    current = create_app(lambda: None).openapi()
+    assert json.loads(saved.read_text()) == json.loads(json.dumps(current))

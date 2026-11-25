@@ -8,3 +8,5 @@
 - 2026-11-25: Milestone 10 (`check-latest`) moved to version 2; version 1 ends at Milestone 9.
 - 2026-11-25: Version 2 scope and order: (1) multiple choice + true/false, graded locally; (2) FastAPI on 127.0.0.1, no auth; (3) React + Vite + TypeScript frontend; (4) check-latest. Folder source and Ollama deferred. See "Version 2" in SPEC.md.
 - 2026-11-25: Quiz questions are stored in `issued_questions` until answered or skipped (open ones expire after 7 days); the CLI and the API both use it. The API listens on 127.0.0.1 only and, having no auth, checks the Host header, requires JSON POST bodies and limits CORS to `[api] allowed_origins`.
+- 2026-11-25: Web frontend in `frontend/` (React + Vite + TypeScript, React Router, TanStack Query, react-markdown). TypeScript is pinned to 5.x because openapi-typescript needs its compiler API (TypeScript 7 has none). `learnova serve` serves `frontend/dist` when it exists. Report lists are ordered by the date and run number in the file name, not file times.
+- 2026-11-25: Version 2 ends at V2.3; `check-latest` deferred again, to a later version.
