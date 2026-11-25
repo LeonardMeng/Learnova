@@ -39,6 +39,7 @@ class NoteSummary(BaseModel):
     title: str
     path: tuple[str, ...]  # titles from the workspace's top page down to this note, inclusive
     last_edited: datetime
+    parent_id: str | None = None  # source_id of the note this one sits under; None for the top
 
 
 class Note(BaseModel):

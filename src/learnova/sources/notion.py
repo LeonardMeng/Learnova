@@ -34,6 +34,7 @@ class PageNode:
     title: str
     depth: int  # 0 = direct sub-page of the root page
     kind: Literal["page", "database"] = "page"
+    parent_id: str | None = None  # the page this one sits in (even when inside a toggle)
 
 
 def make_client(token: str | None = None) -> Client:
@@ -85,20 +86,24 @@ def walk_subpages(client: Client, page_id: str) -> Iterator[PageNode]:
 
 
 def _walk(
-    children: Callable[[str], Iterable[dict[str, Any]]], page_id: str, depth: int
+    children: Callable[[str], Iterable[dict[str, Any]]],
+    block_id: str,
+    depth: int,
+    page_id: str | None = None,
 ) -> Iterator[PageNode]:
-    for block in children(page_id):
+    page_id = page_id or block_id  # the page that contains the blocks being read
+    for block in children(block_id):
         btype = block.get("type")
         if btype == "child_page":
             title = block["child_page"].get("title") or "(untitled)"
-            yield PageNode(id=block["id"], title=title, depth=depth)
+            yield PageNode(id=block["id"], title=title, depth=depth, parent_id=page_id)
             yield from _walk(children, block["id"], depth + 1)
         elif btype == "child_database":
             title = block["child_database"].get("title") or "(untitled)"
-            yield PageNode(id=block["id"], title=title, depth=depth, kind="database")
+            yield PageNode(block["id"], title, depth, kind="database", parent_id=page_id)
         elif block.get("has_children"):
             # A toggle, column, callout, etc. can hold sub-pages: search inside it.
-            yield from _walk(children, block["id"], depth)
+            yield from _walk(children, block["id"], depth, page_id)
 
 
 class NotionSource(NoteSource):
@@ -127,7 +132,9 @@ class NotionSource(NoteSource):
                 continue
             stack = [*stack[: node.depth], node.title]
             page = self._client.pages.retrieve(page_id=node.id)
-            notes.append(_summary(node.id, node.title, (root_title, *stack), page))
+            notes.append(
+                _summary(node.id, node.title, (root_title, *stack), page, parent_id=node.parent_id)
+            )
         return notes
 
     def fetch(self, note_id: str) -> str:
@@ -141,10 +148,17 @@ class NotionSource(NoteSource):
         return self._blocks[block_id]
 
 
-def _summary(page_id: str, title: str, path: tuple[str, ...], page: dict[str, Any]) -> NoteSummary:
+def _summary(
+    page_id: str,
+    title: str,
+    path: tuple[str, ...],
+    page: dict[str, Any],
+    parent_id: str | None = None,
+) -> NoteSummary:
     return NoteSummary(
         source_id=page_id,
         title=title,
         path=path,
         last_edited=datetime.fromisoformat(page["last_edited_time"]),
+        parent_id=parent_id,
     )

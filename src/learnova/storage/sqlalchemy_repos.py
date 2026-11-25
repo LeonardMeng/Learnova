@@ -175,6 +175,12 @@ class SqlNoteRepository(NoteRepository):
             row = self._by_source(s, workspace_id, source_id)
             return _note(row) if row else None
 
+    def delete(self, workspace_id, source_id) -> None:
+        with self._sessions.begin() as s:
+            row = self._by_source(s, workspace_id, source_id)
+            if row is not None:
+                s.delete(row)
+
     @staticmethod
     def _by_source(s: Session, workspace_id: uuid.UUID, source_id: str) -> NoteRow | None:
         return s.scalars(

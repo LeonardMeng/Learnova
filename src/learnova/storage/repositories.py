@@ -75,3 +75,7 @@ class NoteRepository(ABC):
 
     @abstractmethod
     def get_by_source_id(self, workspace_id: uuid.UUID, source_id: str) -> Note | None: ...
+
+    @abstractmethod
+    def delete(self, workspace_id: uuid.UUID, source_id: str) -> None:
+        """Remove the note if it exists."""

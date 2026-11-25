@@ -13,7 +13,7 @@ from learnova.home import WORKSPACE_FILE
 from learnova.services.workspaces import WorkspaceError, WorkspaceService
 from learnova.sources import notion
 from learnova.sources.notion_markdown import PLACEHOLDER_TYPES, SUPPORTED_TYPES
-from learnova.sync import sync_workspace
+from learnova.sync import Change, NoteChange, sync_workspace
 
 app = typer.Typer(
     help="Learnova: an AI teaching assistant for your study notes.", no_args_is_help=True
@@ -36,14 +36,25 @@ def ping(page: Annotated[str, typer.Argument(help="Notion page ID or page URL.")
     typer.echo(f"\n{count} sub-page(s) found.")
 
 
+_SYMBOLS = {
+    Change.ADDED: "+",
+    Change.CHANGED: "~",
+    Change.RENAMED: ">",
+    Change.DELETED: "-",
+}
+
+
 @app.command()
 def sync(
     workspace_name: Annotated[
         str | None,
         typer.Option("--workspace", "-w", help="Workspace name. Default: the one you're in."),
     ] = None,
+    full: Annotated[
+        bool, typer.Option("--full", help="Re-download every note, even unchanged ones.")
+    ] = False,
 ) -> None:
-    """Read every note in the workspace's Notion page into its cache/ folder."""
+    """Read the workspace's Notion pages into cache/ and report what changed."""
     with user_errors():
         repos = repositories()
         ws = WorkspaceService(repos).current(Path.cwd(), workspace_name)
@@ -51,14 +62,25 @@ def sync(
             raise WorkspaceError(f"Workspace directory {ws.path} not found (moved or deleted?).")
         source = notion.NotionSource(notion.make_client(), ws.notion_page_id)
         typer.echo(f"Syncing {ws.name!r} from Notion…")
-        result = sync_workspace(
-            ws, source, repos.notes, on_note=lambda s: typer.echo(f"  ✓ {' / '.join(s.path)}")
-        )
-    typer.echo(f"\nSynced {len(result.notes)} note(s) into {short_path(result.cache_dir)}")
-    typer.echo("Block types: " + _block_types(source.block_types))
+        result = sync_workspace(ws, source, repos.notes, on_change=_print_change, full=full)
+
+    counts = ", ".join(f"{len(result.of(kind))} {kind}" for kind in Change)
+    typer.echo(f"\n{counts}.")
+    typer.echo(f"Cache: {short_path(result.cache_dir)}")
+    if result.downloaded:
+        typer.echo("Block types (downloaded notes only): " + _block_types(source.block_types))
     if source.skipped_databases:
         names = ", ".join(repr(n) for n in source.skipped_databases)
         typer.echo(f"Skipped {len(source.skipped_databases)} database(s): {names}")
+
+
+def _print_change(change: NoteChange) -> None:
+    if change.kind == Change.UNCHANGED:
+        return
+    line = f"  {_SYMBOLS[change.kind]} {' / '.join(change.path):<50} {change.kind}"
+    if change.previous_path and change.previous_path != change.path:
+        line += f" (was: {' / '.join(change.previous_path)})"
+    typer.echo(line)
 
 
 def _block_types(counts) -> str:
