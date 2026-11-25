@@ -15,6 +15,8 @@ from learnova.home import (
     read_workspace_file,
     write_workspace_file,
 )
+from learnova.ignore import IGNORE_FILE
+from learnova.ignore import TEMPLATE as IGNORE_TEMPLATE
 from learnova.models import User, Workspace
 from learnova.storage.database import Repositories
 from learnova.storage.repositories import WorkspaceNameTaken, WorkspaceNotFound
@@ -69,6 +71,9 @@ class WorkspaceService:
         workspace_id = uuid.uuid4()
         directory.mkdir(parents=True, exist_ok=True)
         write_workspace_file(directory, WorkspaceFile(workspace_id, name, notion_page_id))
+        ignore_file = directory / IGNORE_FILE
+        if not ignore_file.exists():
+            ignore_file.write_text(IGNORE_TEMPLATE, encoding="utf-8")
         try:
             return self._repos.workspaces.add(
                 self.user.id, name, notion_page_id, directory, workspace_id=workspace_id

@@ -98,13 +98,18 @@ class NoteRepository(ABC):
     @abstractmethod
     def mark_reviewed(self, note_id: uuid.UUID, content_hash: str) -> None: ...
 
+    @abstractmethod
+    def set_ignored(self, note_id: uuid.UUID, ignored: bool) -> None: ...
+
 
 class ImageRepository(ABC):
     @abstractmethod
     def list_for_note(self, note_id: uuid.UUID) -> list[NoteImage]: ...
 
     @abstractmethod
-    def list_for_workspace(self, workspace_id: uuid.UUID) -> list[NoteImage]: ...
+    def list_for_workspace(
+        self, workspace_id: uuid.UUID, include_ignored: bool = True
+    ) -> list[NoteImage]: ...
 
     @abstractmethod
     def save(
@@ -154,7 +159,8 @@ class KnowledgeRepository(ABC):
 
     @abstractmethod
     def sources(self, user_id: uuid.UUID) -> list[PointSource]:
-        """Every (point, note) link of the user's points, with note path and workspace name."""
+        """Every (point, note) link of the user's points, with note path and workspace name.
+        Links to notes hidden by .learnovaignore are left out."""
 
     @abstractmethod
     def create(

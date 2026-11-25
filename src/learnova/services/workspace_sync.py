@@ -7,6 +7,7 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from learnova import ignore
 from learnova.config import load_settings
 from learnova.home import WORKSPACE_FILE
 from learnova.llm import factory
@@ -41,7 +42,10 @@ def run_sync(
 ) -> SyncRun:
     if not (workspace.path / WORKSPACE_FILE).is_file():
         raise WorkspaceError(f"Workspace directory {workspace.path} not found (moved or deleted?).")
-    source = notion.NotionSource(notion.make_client(), workspace.notion_page_id)
+    rules = ignore.load(
+        workspace.path
+    )  # a mistake in .learnovaignore stops here, before any change
+    source = notion.NotionSource(notion.make_client(), workspace.notion_page_id, rules)
     result = sync_workspace(
         workspace, source, repos.notes, repos.images, on_change=on_change, full=full
     )

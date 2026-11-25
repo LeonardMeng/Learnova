@@ -16,7 +16,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from learnova.models import ImageRef, Note, NoteImage, NoteSummary, Workspace
-from learnova.sources.base import NoteSource
+from learnova.sources.base import IgnoredPage, NoteSource
 from learnova.storage.repositories import ImageRepository, NoteRepository
 
 CACHE_DIR = "cache"
@@ -36,6 +36,8 @@ class Change(StrEnum):
     CHANGED = "changed"  # content differs (it may also have been renamed or moved)
     RENAMED = "renamed/moved"  # same content, new title or position in the tree
     DELETED = "deleted"
+    IGNORED = "ignored"  # newly hidden by .learnovaignore (kept, not reviewed or quizzed)
+    RESTORED = "restored"  # no longer ignored
     UNCHANGED = "unchanged"
 
 
@@ -54,6 +56,7 @@ class SyncResult:
     downloaded: int  # notes whose content was fetched
     images_downloaded: int = 0
     image_errors: tuple[str, ...] = ()
+    ignored: tuple[IgnoredPage, ...] = ()  # pages .learnovaignore left out (top of each subtree)
 
     def of(self, kind: Change) -> list[NoteChange]:
         return [c for c in self.changes if c.kind == kind]
@@ -239,8 +242,10 @@ def _parents_to_refresh(summaries: list[NoteSummary], stored: dict[str, Note]) -
         if previous is not None and previous.path[:-1] in by_path:
             refresh.add(by_path[previous.path[:-1]])  # moved away from here
     for source_id, previous in stored.items():
+        if previous.ignored:
+            continue  # already hidden: nothing changes for its parent
         if source_id not in current and previous.path[:-1] in by_path:
-            refresh.add(by_path[previous.path[:-1]])  # deleted from here
+            refresh.add(by_path[previous.path[:-1]])  # deleted or ignored from here
     return refresh
 
 
@@ -280,7 +285,11 @@ def sync_workspace(
             and summary.source_id not in refresh
             and _can_skip(previous, summary, cache_file)
         ):
-            emit(NoteChange(Change.UNCHANGED, summary.source_id, summary.path))
+            if previous.ignored:  # un-ignored and unchanged: just show it again
+                notes.set_ignored(previous.id, False)
+                emit(NoteChange(Change.RESTORED, summary.source_id, summary.path))
+            else:
+                emit(NoteChange(Change.UNCHANGED, summary.source_id, summary.path))
             continue
 
         content = source.fetch(summary.source_id)
@@ -299,7 +308,9 @@ def sync_workspace(
             emit(NoteChange(Change.ADDED, summary.source_id, summary.path))
             continue
         moved = previous.path != summary.path or previous.title != summary.title
-        if previous.content_hash != new_hash:
+        if previous.ignored:
+            kind = Change.RESTORED
+        elif previous.content_hash != new_hash:
             kind = Change.CHANGED
         elif moved:
             kind = Change.RENAMED
@@ -307,8 +318,19 @@ def sync_workspace(
             kind = Change.UNCHANGED  # edited and changed back, or only page properties changed
         emit(NoteChange(kind, summary.source_id, summary.path, previous.path if moved else None))
 
+    ignored = source.ignored_pages()
+    ignored_ids = {p.source_id for p in ignored}
+    ignored_paths = [p.path for p in ignored]
     for source_id, previous in stored.items():
         if source_id in seen:
+            continue
+        hidden = source_id in ignored_ids or any(
+            previous.path[: len(p)] == p for p in ignored_paths
+        )
+        if hidden:  # left out by .learnovaignore: keep it, but hide it
+            if not previous.ignored:
+                notes.set_ignored(previous.id, True)
+                emit(NoteChange(Change.IGNORED, source_id, previous.path))
             continue
         (cache / cache_filename(previous.title, source_id)).unlink(missing_ok=True)
         notes.delete(workspace.id, source_id)  # its note_images rows go with it
@@ -316,6 +338,7 @@ def sync_workspace(
 
     _remove_unused_image_files(workspace, images)
     return SyncResult(
+        ignored=tuple(ignored),
         changes=changes,
         cache_dir=cache,
         downloaded=downloaded,

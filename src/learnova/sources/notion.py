@@ -16,8 +16,9 @@ from notion_client import Client
 from notion_client.helpers import collect_paginated_api, iterate_paginated_api
 
 from learnova.errors import LearnovaError
+from learnova.ignore import IgnoreRules
 from learnova.models import ImageRef, NoteContent, NoteSummary
-from learnova.sources.base import NoteSource
+from learnova.sources.base import IgnoredPage, NoteSource
 from learnova.sources.notion_markdown import MarkdownConverter
 
 TOKEN_ENV = "NOTION_API_KEY"
@@ -92,20 +93,24 @@ def _walk(
     block_id: str,
     depth: int,
     page_id: str | None = None,
+    prune: Callable[[PageNode], bool] | None = None,
 ) -> Iterator[PageNode]:
+    """`prune(node)` is asked after each page is yielded; True skips everything under it."""
     page_id = page_id or block_id  # the page that contains the blocks being read
     for block in children(block_id):
         btype = block.get("type")
         if btype == "child_page":
             title = block["child_page"].get("title") or "(untitled)"
-            yield PageNode(id=block["id"], title=title, depth=depth, parent_id=page_id)
-            yield from _walk(children, block["id"], depth + 1)
+            node = PageNode(id=block["id"], title=title, depth=depth, parent_id=page_id)
+            yield node
+            if prune is None or not prune(node):
+                yield from _walk(children, block["id"], depth + 1, prune=prune)
         elif btype == "child_database":
             title = block["child_database"].get("title") or "(untitled)"
             yield PageNode(block["id"], title, depth, kind="database", parent_id=page_id)
         elif block.get("has_children"):
             # A toggle, column, callout, etc. can hold sub-pages: search inside it.
-            yield from _walk(children, block["id"], depth, page_id)
+            yield from _walk(children, block["id"], depth, page_id, prune)
 
 
 class NotionSource(NoteSource):
@@ -115,9 +120,11 @@ class NotionSource(NoteSource):
     then fetching each page doesn't download the same blocks twice.
     """
 
-    def __init__(self, client: Client, root_page_id: str):
+    def __init__(self, client: Client, root_page_id: str, ignore: IgnoreRules | None = None):
         self._client = client
         self._root = root_page_id
+        self._ignore = ignore or IgnoreRules()
+        self._ignored: list[IgnoredPage] = []
         self._blocks: dict[str, list[dict[str, Any]]] = {}
         self.block_types: Counter[str] = Counter()  # filled in by fetch()
         self.skipped_databases: list[str] = []  # filled in by list_notes()
@@ -127,17 +134,27 @@ class NotionSource(NoteSource):
         root_title = _title_of(root)
         notes = [_summary(self._root, root_title, (root_title,), root)]
         self.skipped_databases = []
+        self._ignored = []
+        pruned: set[str] = set()
         stack: list[str] = []  # titles of the pages above the current one
-        for node in _walk(self._children, self._root, 0):
+        # _walk is lazy: it asks `prune` about a page only after we've handled it below.
+        for node in _walk(self._children, self._root, 0, prune=lambda n: n.id in pruned):
+            stack = [*stack[: node.depth], node.title]
+            if self._ignore.ignores(tuple(stack), node.id):
+                pruned.add(node.id)
+                self._ignored.append(IgnoredPage(node.id, (root_title, *stack)))
+                continue
             if node.kind == "database":
                 self.skipped_databases.append(node.title)
                 continue
-            stack = [*stack[: node.depth], node.title]
             page = self._client.pages.retrieve(page_id=node.id)
             notes.append(
                 _summary(node.id, node.title, (root_title, *stack), page, parent_id=node.parent_id)
             )
         return notes
+
+    def ignored_pages(self) -> list[IgnoredPage]:
+        return list(self._ignored)
 
     def fetch(self, note_id: str) -> NoteContent:
         converter = MarkdownConverter(self._children, self.block_types)

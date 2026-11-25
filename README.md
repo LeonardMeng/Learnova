@@ -64,6 +64,26 @@ learnova quiz          # from anywhere: questions drawn from all your workspaces
 learnova status        # mastery and your weakest points
 ```
 
+## Leaving pages out: `.learnovaignore`
+
+Put a `.learnovaignore` file in the workspace folder (`workspace new` creates a commented one) to
+leave sub-pages out of the workspace. One pattern per line; matching ignores case:
+
+```gitignore
+Behaviour Questions        # a page with this title, at any depth, and everything under it
+Draft*                     # * and ? work within a title
+Database / Old notes       # a path of titles, counted from the workspace's top page
+**/Scratch                 # ** matches any number of levels
+3e6135e3ecf04389846ce4126df126b0   # a page by its Notion ID or URL (survives renames)
+!Draft – final             # ! brings a page back; the last matching line wins
+```
+
+(Comments go on their own lines in the real file.) Ignored pages aren't read from Notion. Pages
+that were already synced are hidden, not deleted: `sync` shows them as `× ignored`, and review,
+quiz and status leave them out. Remove the line and run `sync` to bring them back (`↩ restored`)
+with their knowledge points. A page inside an ignored page can't be brought back with `!`; ignore
+its siblings instead. Titles that contain `/` can only be matched by their page ID.
+
 ## Which workspace a command uses
 
 Commands that work inside a workspace (`sync`, `review`) use, in order: the workspace named with

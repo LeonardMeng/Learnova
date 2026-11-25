@@ -1618,6 +1618,18 @@
               }
             ],
             "title": "Not Described Because"
+          },
+          "ignored": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Ignored",
+            "description": "Pages .learnovaignore left out (top of each subtree), as paths",
+            "default": []
           }
         },
         "type": "object",

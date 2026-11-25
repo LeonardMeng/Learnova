@@ -246,7 +246,9 @@ def test_sync_command_without_vision_model(tmp_path, monkeypatch, learnova_home)
     )
     monkeypatch.setattr(workspace_cli, "check_notion_page", lambda page_id: "Trees")
     monkeypatch.setattr(notion, "make_client", lambda: None)
-    monkeypatch.setattr(notion, "NotionSource", lambda client, page: _with_stats(source))
+    monkeypatch.setattr(
+        notion, "NotionSource", lambda client, page, rules=None: _with_stats(source)
+    )
     runner = CliRunner()
     ws_dir = tmp_path / "ws"
     runner.invoke(app, ["workspace", "new", "w", "--notion", N1, "--path", str(ws_dir)])

@@ -367,7 +367,7 @@ def test_review_and_merge_commands(tmp_path, monkeypatch, learnova_home):
     source.block_types, source.skipped_databases = Counter(), []
     monkeypatch.setattr(workspace_cli, "check_notion_page", lambda page_id: "Interview")
     monkeypatch.setattr(notion, "make_client", lambda: None)
-    monkeypatch.setattr(notion, "NotionSource", lambda client, page: source)
+    monkeypatch.setattr(notion, "NotionSource", lambda client, page, rules=None: source)
     monkeypatch.setattr(factory, "main_model", lambda settings: object())
     reviewer = Script(
         Database=lambda r: review(new=[("Caching", 4)]),  # reviewed first (path order)

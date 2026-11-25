@@ -628,6 +628,12 @@ export interface components {
             pending_images: number;
             /** Not Described Because */
             not_described_because: string | null;
+            /**
+             * Ignored
+             * @description Pages .learnovaignore left out (top of each subtree), as paths
+             * @default []
+             */
+            ignored: string[][];
         };
         /** ValidationError */
         ValidationError: {

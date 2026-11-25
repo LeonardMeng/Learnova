@@ -136,7 +136,7 @@ class ReviewRun:
 
 
 def notes_to_review(repos: Repositories, workspace: Workspace, everything: bool) -> list[Note]:
-    notes = repos.notes.list(workspace.id)
+    notes = [n for n in repos.notes.list(workspace.id) if not n.ignored]
     todo = [n for n in notes if everything or n.reviewed_hash != n.content_hash]
     return sorted(todo, key=lambda n: n.path)
 
@@ -151,9 +151,8 @@ def review_notes(
 ) -> ReviewRun:
     run = ReviewRun(workspace)
     user = repos.users.get_or_create_local()
-    titles = [
-        " / ".join(n.path) for n in sorted(repos.notes.list(workspace.id), key=lambda n: n.path)
-    ]
+    visible = [n for n in repos.notes.list(workspace.id) if not n.ignored]
+    titles = [" / ".join(n.path) for n in sorted(visible, key=lambda n: n.path)]
     for note in notes:
         markdown = read_note(workspace, note)
         if len(_meaningful(markdown)) < MIN_CONTENT_CHARS:

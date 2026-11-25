@@ -53,6 +53,8 @@ _SYMBOLS = {
     Change.CHANGED: "~",
     Change.RENAMED: ">",
     Change.DELETED: "-",
+    Change.IGNORED: "×",
+    Change.RESTORED: "↩",
 }
 
 
@@ -92,11 +94,19 @@ def sync(
         typer.echo(f"Images: {run.described.described} described, {run.described.reused} reused.")
         for error in run.described.errors:
             typer.secho(f"  ! {error}", fg=typer.colors.YELLOW)
-    counts = ", ".join(f"{len(result.of(kind))} {kind}" for kind in Change)
+    optional = (Change.IGNORED, Change.RESTORED)  # only shown when they happened
+    counts = ", ".join(
+        f"{len(result.of(kind))} {kind}"
+        for kind in Change
+        if kind not in optional or result.of(kind)
+    )
     typer.echo(f"\n{counts}.")
     typer.echo(f"Cache: {short_path(result.cache_dir)}")
     if result.downloaded:
         typer.echo("Block types (downloaded notes only): " + _block_types(run.block_types))
+    if result.ignored:
+        names = ", ".join(" / ".join(p.path[1:]) for p in result.ignored)
+        typer.echo(f"Ignored by .learnovaignore: {names}")
     if run.skipped_databases:
         names = ", ".join(repr(n) for n in run.skipped_databases)
         typer.echo(f"Skipped {len(run.skipped_databases)} database(s): {names}")

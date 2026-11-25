@@ -85,6 +85,7 @@ def sync(name: str, body: schemas.SyncIn, repos: Repos, locks: Locks):
         describe_errors=list(described.errors) if described else [],
         pending_images=run.pending_images,
         not_described_because=run.not_described_because,
+        ignored=[list(p.path) for p in result.ignored],
     )
 
 

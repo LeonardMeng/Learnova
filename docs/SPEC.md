@@ -240,3 +240,15 @@ approved before it is built.
 
 Deferred beyond this version: the local-folder source, local models (Ollama), the explain and code
 question types and mixed sessions, Postgres, webhooks.
+
+## Version 2.1
+
+2026-11-25 · Version 2 ended at V2.3; `check-latest` is deferred to a later version.
+
+1. **`.learnovaignore`.** A file in the workspace folder lists sub-pages to leave out, one pattern
+   per line: a page title (any depth, with `*`/`?`), a path of titles from the top page
+   (`Database / Old notes`, `**` for any depth), or a Notion page ID or URL; `!` brings a page
+   back and the last matching line wins; matching ignores case. Ignored pages and everything under
+   them are not read from Notion. Pages that were already synced are kept in the database but
+   hidden from review, quiz and status; removing the line restores them, links to knowledge
+   points included. `workspace new` writes a commented template.

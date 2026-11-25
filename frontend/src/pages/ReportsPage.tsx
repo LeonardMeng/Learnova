@@ -109,13 +109,19 @@ function SyncSummary({ result }: { result: SyncResult }) {
   return (
     <div className="card notice">
       <strong>Synced.</strong> {c.added ?? 0} added, {c.changed ?? 0} changed, {c["renamed/moved"] ?? 0} renamed/moved,{" "}
-      {c.deleted ?? 0} deleted, {c.unchanged ?? 0} unchanged.
+      {c.deleted ?? 0} deleted,{c.ignored ? ` ${c.ignored} ignored,` : ""}
+      {c.restored ? ` ${c.restored} restored,` : ""} {c.unchanged ?? 0} unchanged.
       {result.images_downloaded > 0 && <> Images: {result.images_downloaded} downloaded.</>}
       {result.images_described + result.images_reused > 0 && (
         <> Descriptions: {result.images_described} new, {result.images_reused} reused.</>
       )}
       {result.pending_images > 0 && result.not_described_because && (
         <p className="muted">{result.pending_images} image(s) not described: {result.not_described_because}</p>
+      )}
+      {result.ignored && result.ignored.length > 0 && (
+        <p className="muted">
+          Ignored by .learnovaignore: {result.ignored.map((p) => p.slice(1).join(" / ")).join(", ")}
+        </p>
       )}
       {result.changes.length > 0 && (
         <ul>

@@ -55,6 +55,7 @@ class Note(BaseModel):
     content_hash: str
     synced_at: datetime
     reviewed_hash: str | None = None  # content_hash at the last review; None = never reviewed
+    ignored: bool = False  # hidden by .learnovaignore: kept, but not reviewed or quizzed
 
 
 class ImageRef(BaseModel):

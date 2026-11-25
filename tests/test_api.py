@@ -133,7 +133,7 @@ def test_sync_endpoint_and_busy_lock(client, repos, points, monkeypatch):
     source = Source({"11111111-1111-1111-1111-111111111111": ("Redis", "Changed text.\n")})
     source.block_types, source.skipped_databases = Counter({"paragraph": 1}), []
     monkeypatch.setattr(notion, "make_client", lambda: None)
-    monkeypatch.setattr(notion, "NotionSource", lambda client, page: source)
+    monkeypatch.setattr(notion, "NotionSource", lambda client, page, rules=None: source)
 
     with client.app.state.locks.hold("redis", "sync"):
         assert client.post("/api/workspaces/redis/sync", json={}).status_code == 409
@@ -299,17 +299,13 @@ def test_merge_moves_open_questions_and_old_ones_expire(client, repos, points, f
 
 
 def test_serves_the_built_frontend(tmp_path, repos):
-    from learnova.api.app import _serve_frontend
-
     dist = tmp_path / "dist"
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text("<div id=root></div>")
     (dist / "assets" / "app.js").write_text("console.log(1)")
     (dist / "favicon.svg").write_text("<svg/>")
     (tmp_path / "secret.txt").write_text("no")
-    app = create_app(lambda: repos)
-    _serve_frontend(app, dist)
-    client = TestClient(app, base_url=BASE)
+    client = TestClient(create_app(lambda: repos, frontend_dist=dist), base_url=BASE)
 
     assert client.get("/").text == "<div id=root></div>"
     assert client.get("/quiz").text == "<div id=root></div>"  # the app's own routes

@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    false,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
@@ -95,6 +96,8 @@ class NoteRow(Base):
     content_hash: Mapped[str] = mapped_column(String(64))  # sha256 of the Markdown body
     synced_at: Mapped[datetime] = mapped_column(UTCDateTime)
     reviewed_hash: Mapped[str | None] = mapped_column(String(64))  # content_hash at last review
+    # Hidden by .learnovaignore: kept with its links, but left out of review, quiz and status.
+    ignored: Mapped[bool] = mapped_column(default=False, server_default=false())
 
 
 class NoteImageRow(Base):

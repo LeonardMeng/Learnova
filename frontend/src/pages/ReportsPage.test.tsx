@@ -11,6 +11,26 @@ const workspaces = [
 const markdown = "# Review: interview\n\n| | Point |\n|---|---|\n| new | **RDB** |\n";
 
 describe("Reports page", () => {
+  it("shows a sync summary with ignored and restored pages", async () => {
+    mockApi({
+      "GET /api/workspaces": workspaces,
+      "GET /api/workspaces/interview/reports": [],
+      "POST /api/workspaces/interview/sync": {
+        changes: [{ kind: "ignored", path: ["Interview", "Behaviour"], previous_path: null }],
+        counts: { added: 0, changed: 0, "renamed/moved": 0, deleted: 0, ignored: 1, restored: 0, unchanged: 3 },
+        notes_downloaded: 0, images_downloaded: 0, image_errors: [], block_types: {}, skipped_databases: [],
+        images_described: 0, images_reused: 0, describe_errors: [], pending_images: 0, not_described_because: null,
+        ignored: [["Interview", "Behaviour"]],
+      },
+    });
+    const user = userEvent.setup();
+    renderApp("/reports");
+    await user.click(await screen.findByRole("button", { name: "Sync from Notion" }));
+    expect(await screen.findByText(/1 ignored,/)).toBeInTheDocument();
+    expect(screen.getByText("Ignored by .learnovaignore: Behaviour")).toBeInTheDocument();
+    expect(screen.getByText("ignored: Interview / Behaviour")).toBeInTheDocument();
+  });
+
   it("uses the default workspace, lists and renders reports, and runs a review", async () => {
     let reports = [{ name: "2026-11-25-review.md", size: 10, modified: "2026-11-25T03:00:00Z" }];
     const calls = mockApi({

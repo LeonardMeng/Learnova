@@ -82,6 +82,7 @@ def _note(row: NoteRow) -> Note:
         content_hash=row.content_hash,
         synced_at=row.synced_at,
         reviewed_hash=row.reviewed_hash,
+        ignored=row.ignored,
     )
 
 
@@ -222,6 +223,7 @@ class SqlNoteRepository(NoteRepository):
             row.last_edited_at = summary.last_edited
             row.content_hash = content_hash
             row.synced_at = synced_at
+            row.ignored = False  # listed by the source, so not ignored
             s.flush()
             return _note(row)
 
@@ -240,6 +242,12 @@ class SqlNoteRepository(NoteRepository):
             row = self._by_source(s, workspace_id, source_id)
             if row is not None:
                 s.delete(row)
+
+    def set_ignored(self, note_id, ignored) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(NoteRow, note_id)
+            if row is not None:
+                row.ignored = ignored
 
     def mark_reviewed(self, note_id, content_hash) -> None:
         with self._sessions.begin() as s:
@@ -265,13 +273,16 @@ class SqlImageRepository(ImageRepository):
             rows = s.scalars(select(NoteImageRow).where(NoteImageRow.note_id == note_id))
             return [_image(r) for r in rows]
 
-    def list_for_workspace(self, workspace_id) -> list[NoteImage]:
+    def list_for_workspace(self, workspace_id, include_ignored=True) -> list[NoteImage]:
         with self._sessions() as s:
-            rows = s.scalars(
+            query = (
                 select(NoteImageRow)
                 .join(NoteRow, NoteRow.id == NoteImageRow.note_id)
                 .where(NoteRow.workspace_id == workspace_id)
             )
+            if not include_ignored:
+                query = query.where(NoteRow.ignored.is_(False))
+            rows = s.scalars(query)
             return [_image(r) for r in rows]
 
     def save(self, note_id, ref: ImageRef, path, image_hash, mime_type) -> NoteImage:
@@ -354,7 +365,7 @@ class SqlKnowledgeRepository(KnowledgeRepository):
                 .join(NoteRow, NoteRow.id == KpSourceRow.note_id)
                 .join(WorkspaceRow, WorkspaceRow.id == NoteRow.workspace_id)
                 .join(KnowledgePointRow, KnowledgePointRow.id == KpSourceRow.point_id)
-                .where(KnowledgePointRow.user_id == user_id)
+                .where(KnowledgePointRow.user_id == user_id, NoteRow.ignored.is_(False))
             )
             return [
                 PointSource(point_id=p, note_id=n, note_path=tuple(path), workspace_name=w)

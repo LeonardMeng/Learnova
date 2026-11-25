@@ -65,6 +65,9 @@ class SyncOut(BaseModel):
     describe_errors: list[str]
     pending_images: int
     not_described_because: str | None
+    ignored: list[list[str]] = Field(
+        default=[], description="Pages .learnovaignore left out (top of each subtree), as paths"
+    )
 
 
 class ReviewIn(BaseModel):

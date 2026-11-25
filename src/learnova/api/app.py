@@ -48,7 +48,12 @@ class WorkspaceLocks:
             lock.release()
 
 
-def create_app(repos_factory: Callable[[], Repositories] | None = None) -> FastAPI:
+def create_app(
+    repos_factory: Callable[[], Repositories] | None = None,
+    frontend_dist: Path | None | str = "auto",
+) -> FastAPI:
+    """`frontend_dist`: the built web app to serve at /; "auto" finds frontend/dist, None serves
+    the API only."""
     from learnova.api.routes import points, quiz, status, workspaces
 
     app = FastAPI(
@@ -99,7 +104,8 @@ def create_app(repos_factory: Callable[[], Repositories] | None = None) -> FastA
 
     for module in (workspaces, points, status, quiz):
         app.include_router(module.router)
-    _serve_frontend(app)
+    if frontend_dist is not None:
+        _serve_frontend(app, None if frontend_dist == "auto" else Path(frontend_dist))
     return app
 
 

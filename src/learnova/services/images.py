@@ -27,7 +27,7 @@ class DescribeResult:
 def pending_images(repos: Repositories, workspace: Workspace) -> list[NoteImage]:
     return [
         i
-        for i in repos.images.list_for_workspace(workspace.id)
+        for i in repos.images.list_for_workspace(workspace.id, include_ignored=False)
         if i.path and i.description is None and i.mime_type in DESCRIBABLE
     ]
 

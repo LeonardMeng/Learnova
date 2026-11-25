@@ -33,3 +33,6 @@ Version 2 (see "Version 2" in docs/SPEC.md):
 - [x] V2.2: HTTP API (FastAPI)
 - [x] V2.3: Web frontend
 - [ ] V2.4: check-latest: deferred beyond version 2
+
+Version 2.1:
+- [x] .learnovaignore
