@@ -36,9 +36,12 @@ connection = config.attributes.get("connection")
 if connection is not None:
     _run(connection)
 else:
-    from learnova.config import load_settings
-    from learnova.storage.database import make_engine
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
 
-    engine = make_engine(load_settings().database_url)
+    from learnova.config import load_settings
+
+    # Plain engine: foreign keys stay off during migrations (see storage.database.migrate).
+    engine = create_engine(load_settings().database_url, poolclass=NullPool)
     with engine.connect() as conn:
         _run(conn)

@@ -10,9 +10,14 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
-from learnova.storage.repositories import UserRepository, WorkspaceRepository
-from learnova.storage.sqlalchemy_repos import SqlUserRepository, SqlWorkspaceRepository
+from learnova.storage.repositories import NoteRepository, UserRepository, WorkspaceRepository
+from learnova.storage.sqlalchemy_repos import (
+    SqlNoteRepository,
+    SqlUserRepository,
+    SqlWorkspaceRepository,
+)
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
@@ -21,6 +26,7 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 class Repositories:
     users: UserRepository
     workspaces: WorkspaceRepository
+    notes: NoteRepository
 
 
 def make_engine(url: str) -> Engine:
@@ -34,19 +40,29 @@ def make_engine(url: str) -> Engine:
     return engine
 
 
-def migrate(engine: Engine) -> None:
-    """Apply any migrations the database hasn't seen yet (a no-op when up to date)."""
+def migrate(url: str) -> None:
+    """Apply any migrations the database hasn't seen yet (a no-op when up to date).
+
+    Uses its own connection with foreign keys left OFF: on SQLite, Alembic changes a table by
+    rebuilding it, and with foreign keys on, dropping the old table would cascade-delete rows
+    in other tables (e.g. rebuilding `workspaces` would wipe `notes`).
+    """
+    engine = create_engine(url, poolclass=NullPool)
     cfg = Config()
     cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
-    with engine.begin() as connection:
-        cfg.attributes["connection"] = connection
-        command.upgrade(cfg, "head")
+    try:
+        with engine.begin() as connection:
+            cfg.attributes["connection"] = connection
+            command.upgrade(cfg, "head")
+    finally:
+        engine.dispose()
 
 
 def open_repositories(url: str) -> Repositories:
-    engine = make_engine(url)
-    migrate(engine)
-    sessions = sessionmaker(engine, expire_on_commit=False)
+    migrate(url)
+    sessions = sessionmaker(make_engine(url), expire_on_commit=False)
     return Repositories(
-        users=SqlUserRepository(sessions), workspaces=SqlWorkspaceRepository(sessions)
+        users=SqlUserRepository(sessions),
+        workspaces=SqlWorkspaceRepository(sessions),
+        notes=SqlNoteRepository(sessions),
     )

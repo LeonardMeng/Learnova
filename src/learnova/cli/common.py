@@ -5,14 +5,29 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import NoReturn
 
 import httpx
 import typer
 from notion_client.errors import APIErrorCode, APIResponseError, RequestTimeoutError
 
+from learnova.config import load_settings
 from learnova.services.workspaces import WorkspaceError
 from learnova.sources import notion
+from learnova.storage.database import Repositories, open_repositories
+
+
+def short_path(path: Path) -> str:
+    """Show paths under the home folder as ~/..."""
+    try:
+        return f"~/{path.relative_to(Path.home())}"
+    except ValueError:
+        return str(path)
+
+
+def repositories() -> Repositories:
+    return open_repositories(load_settings().database_url)
 
 
 def fail(message: str) -> NoReturn:

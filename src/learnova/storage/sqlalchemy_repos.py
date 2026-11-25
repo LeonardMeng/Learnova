@@ -10,14 +10,15 @@ from pathlib import Path
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from learnova.models import User, Workspace
+from learnova.models import Note, NoteSummary, User, Workspace
 from learnova.storage.repositories import (
+    NoteRepository,
     UserRepository,
     WorkspaceNameTaken,
     WorkspaceNotFound,
     WorkspaceRepository,
 )
-from learnova.storage.tables import UserRow, WorkspaceRow
+from learnova.storage.tables import NoteRow, UserRow, WorkspaceRow
 
 LOCAL_USER_NAME = "local"
 
@@ -35,6 +36,19 @@ def _workspace(row: WorkspaceRow) -> Workspace:
         path=Path(row.path),
         is_default=row.is_default,
         created_at=row.created_at,
+    )
+
+
+def _note(row: NoteRow) -> Note:
+    return Note(
+        id=row.id,
+        workspace_id=row.workspace_id,
+        source_id=row.source_id,
+        title=row.title,
+        path=tuple(row.path),
+        last_edited=row.last_edited_at,
+        content_hash=row.content_hash,
+        synced_at=row.synced_at,
     )
 
 
@@ -130,4 +144,41 @@ class SqlWorkspaceRepository(WorkspaceRepository):
     def _by_name(s: Session, user_id: uuid.UUID, name: str) -> WorkspaceRow | None:
         return s.scalars(
             select(WorkspaceRow).where(WorkspaceRow.user_id == user_id, WorkspaceRow.name == name)
+        ).first()
+
+
+class SqlNoteRepository(NoteRepository):
+    def __init__(self, sessions: sessionmaker[Session]):
+        self._sessions = sessions
+
+    def upsert(self, workspace_id, summary: NoteSummary, content_hash, synced_at) -> Note:
+        with self._sessions.begin() as s:
+            row = self._by_source(s, workspace_id, summary.source_id)
+            if row is None:
+                row = NoteRow(workspace_id=workspace_id, source_id=summary.source_id)
+                s.add(row)
+            row.title = summary.title
+            row.path = list(summary.path)
+            row.last_edited_at = summary.last_edited
+            row.content_hash = content_hash
+            row.synced_at = synced_at
+            s.flush()
+            return _note(row)
+
+    def list(self, workspace_id) -> list[Note]:
+        with self._sessions() as s:
+            rows = s.scalars(select(NoteRow).where(NoteRow.workspace_id == workspace_id))
+            return [_note(r) for r in rows]
+
+    def get_by_source_id(self, workspace_id, source_id) -> Note | None:
+        with self._sessions() as s:
+            row = self._by_source(s, workspace_id, source_id)
+            return _note(row) if row else None
+
+    @staticmethod
+    def _by_source(s: Session, workspace_id: uuid.UUID, source_id: str) -> NoteRow | None:
+        return s.scalars(
+            select(NoteRow).where(
+                NoteRow.workspace_id == workspace_id, NoteRow.source_id == source_id
+            )
         ).first()

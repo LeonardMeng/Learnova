@@ -28,3 +28,27 @@ class Workspace(BaseModel):
     path: Path
     is_default: bool
     created_at: datetime
+
+
+class NoteSummary(BaseModel):
+    """What a Source knows about a note without reading its content."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source_id: str  # e.g. the Notion page ID
+    title: str
+    path: tuple[str, ...]  # titles from the workspace's top page down to this note, inclusive
+    last_edited: datetime
+
+
+class Note(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    source_id: str
+    title: str
+    path: tuple[str, ...]
+    last_edited: datetime
+    content_hash: str
+    synced_at: datetime

@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, MetaData, String, UniqueConstraint, Uuid
+from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -68,3 +68,18 @@ class WorkspaceRow(Base):
     path: Mapped[str] = mapped_column(String(1024))
     is_default: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class NoteRow(Base):
+    __tablename__ = "notes"
+    __table_args__ = (UniqueConstraint("workspace_id", "source_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    # Notes belong to a workspace: removing the workspace removes its notes (not knowledge points).
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    source_id: Mapped[str] = mapped_column(String(64))  # Notion page ID
+    title: Mapped[str] = mapped_column(String(500))
+    path: Mapped[list[str]] = mapped_column(JSON)  # hierarchy, top page first
+    last_edited_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    content_hash: Mapped[str] = mapped_column(String(64))  # sha256 of the Markdown body
+    synced_at: Mapped[datetime] = mapped_column(UTCDateTime)

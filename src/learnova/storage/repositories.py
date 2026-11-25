@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from datetime import datetime
 from pathlib import Path
 
-from learnova.models import User, Workspace
+from learnova.models import Note, NoteSummary, User, Workspace
 
 
 class WorkspaceNotFound(LookupError):
@@ -56,3 +57,21 @@ class WorkspaceRepository(ABC):
     @abstractmethod
     def remove(self, user_id: uuid.UUID, name: str) -> Workspace:
         """Unregister and return the removed workspace. Raises WorkspaceNotFound."""
+
+
+class NoteRepository(ABC):
+    @abstractmethod
+    def upsert(
+        self,
+        workspace_id: uuid.UUID,
+        summary: NoteSummary,
+        content_hash: str,
+        synced_at: datetime,
+    ) -> Note:
+        """Insert the note, or update it if this workspace already has one with that source_id."""
+
+    @abstractmethod
+    def list(self, workspace_id: uuid.UUID) -> list[Note]: ...
+
+    @abstractmethod
+    def get_by_source_id(self, workspace_id: uuid.UUID, source_id: str) -> Note | None: ...

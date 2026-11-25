@@ -10,25 +10,15 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from learnova.cli.common import user_errors
-from learnova.config import load_settings
+from learnova.cli.common import repositories, short_path, user_errors
 from learnova.services.workspaces import WorkspaceService
 from learnova.sources import notion
-from learnova.storage.database import open_repositories
 
 app = typer.Typer(help="Create and manage workspaces.", no_args_is_help=True)
 
 
 def _service() -> WorkspaceService:
-    return WorkspaceService(open_repositories(load_settings().database_url))
-
-
-def _short(path: Path) -> str:
-    """Show paths under the home folder as ~/..."""
-    try:
-        return f"~/{path.relative_to(Path.home())}"
-    except ValueError:
-        return str(path)
+    return WorkspaceService(repositories())
 
 
 def check_notion_page(page_id: str) -> str:
@@ -76,7 +66,7 @@ def list_workspaces() -> None:
         ws = item.workspace
         marks = ("→" if item.current else " ") + ("★" if ws.is_default else " ")
         status = "ok" if item.found else "[red]not found[/red]"
-        table.add_row(marks, ws.name, _short(ws.path), ws.notion_page_id, status)
+        table.add_row(marks, ws.name, short_path(ws.path), ws.notion_page_id, status)
     Console().print(table)
 
 

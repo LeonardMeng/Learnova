@@ -1,16 +1,22 @@
-"""Notion access. For Milestone 1 this only walks the sub-page tree; Milestone 3 grows it into
-NotionSource (list_notes / fetch)."""
+"""Notion access: the client, the sub-page walker used by `ping`, and NotionSource, which
+implements the NoteSource interface for sync."""
 
 from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterator
+from collections import Counter
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
-from typing import Literal
+from datetime import datetime
+from typing import Any, Literal
 
 from notion_client import Client
-from notion_client.helpers import iterate_paginated_api
+from notion_client.helpers import collect_paginated_api, iterate_paginated_api
+
+from learnova.models import NoteSummary
+from learnova.sources.base import NoteSource
+from learnova.sources.notion_markdown import MarkdownConverter
 
 TOKEN_ENV = "NOTION_API_KEY"
 
@@ -55,28 +61,90 @@ def parse_page_id(page: str) -> str:
 
 
 def page_title(client: Client, page_id: str) -> str:
-    page = client.pages.retrieve(page_id=page_id)
+    return _title_of(client.pages.retrieve(page_id=page_id))
+
+
+def _title_of(page: dict[str, Any]) -> str:
     for prop in page.get("properties", {}).values():
         if prop.get("type") == "title":
             return "".join(t.get("plain_text", "") for t in prop["title"]) or "(untitled)"
     return "(untitled)"
 
 
-def walk_subpages(client: Client, page_id: str, depth: int = 0) -> Iterator[PageNode]:
+def walk_subpages(client: Client, page_id: str) -> Iterator[PageNode]:
     """Yield every sub-page under page_id, depth first, in the order they appear on the page.
 
     Sub-pages nested inside toggles, columns and other container blocks are included at the
     same depth as the page that contains them. Databases are listed but not entered.
     """
-    for block in iterate_paginated_api(client.blocks.children.list, block_id=page_id):
+
+    def children(block_id: str) -> Iterable[dict[str, Any]]:
+        return iterate_paginated_api(client.blocks.children.list, block_id=block_id)
+
+    return _walk(children, page_id, 0)
+
+
+def _walk(
+    children: Callable[[str], Iterable[dict[str, Any]]], page_id: str, depth: int
+) -> Iterator[PageNode]:
+    for block in children(page_id):
         btype = block.get("type")
         if btype == "child_page":
             title = block["child_page"].get("title") or "(untitled)"
             yield PageNode(id=block["id"], title=title, depth=depth)
-            yield from walk_subpages(client, block["id"], depth + 1)
+            yield from _walk(children, block["id"], depth + 1)
         elif btype == "child_database":
             title = block["child_database"].get("title") or "(untitled)"
             yield PageNode(id=block["id"], title=title, depth=depth, kind="database")
         elif block.get("has_children"):
             # A toggle, column, callout, etc. can hold sub-pages: search inside it.
-            yield from walk_subpages(client, block["id"], depth)
+            yield from _walk(children, block["id"], depth)
+
+
+class NotionSource(NoteSource):
+    """Reads the top page and every sub-page under it as notes.
+
+    Block lists are cached for the lifetime of the object (one sync), so listing the tree and
+    then fetching each page doesn't download the same blocks twice.
+    """
+
+    def __init__(self, client: Client, root_page_id: str):
+        self._client = client
+        self._root = root_page_id
+        self._blocks: dict[str, list[dict[str, Any]]] = {}
+        self.block_types: Counter[str] = Counter()  # filled in by fetch()
+        self.skipped_databases: list[str] = []  # filled in by list_notes()
+
+    def list_notes(self) -> list[NoteSummary]:
+        root = self._client.pages.retrieve(page_id=self._root)
+        root_title = _title_of(root)
+        notes = [_summary(self._root, root_title, (root_title,), root)]
+        self.skipped_databases = []
+        stack: list[str] = []  # titles of the pages above the current one
+        for node in _walk(self._children, self._root, 0):
+            if node.kind == "database":
+                self.skipped_databases.append(node.title)
+                continue
+            stack = [*stack[: node.depth], node.title]
+            page = self._client.pages.retrieve(page_id=node.id)
+            notes.append(_summary(node.id, node.title, (root_title, *stack), page))
+        return notes
+
+    def fetch(self, note_id: str) -> str:
+        return MarkdownConverter(self._children, self.block_types).page(note_id)
+
+    def _children(self, block_id: str) -> list[dict[str, Any]]:
+        if block_id not in self._blocks:
+            self._blocks[block_id] = collect_paginated_api(
+                self._client.blocks.children.list, block_id=block_id
+            )
+        return self._blocks[block_id]
+
+
+def _summary(page_id: str, title: str, path: tuple[str, ...], page: dict[str, Any]) -> NoteSummary:
+    return NoteSummary(
+        source_id=page_id,
+        title=title,
+        path=path,
+        last_edited=datetime.fromisoformat(page["last_edited_time"]),
+    )
