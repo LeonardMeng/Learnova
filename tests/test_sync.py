@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from learnova.models import NoteSummary
+from learnova.models import NoteContent, NoteSummary
 from learnova.sources.base import NoteSource
 from learnova.sources.notion import NotionSource
 from learnova.storage.database import open_repositories
@@ -24,7 +24,10 @@ class FakeSource(NoteSource):
 
     def fetch(self, note_id):
         self.fetched.append(note_id)
-        return self.notes[note_id][1]
+        return NoteContent(markdown=self.notes[note_id][1])
+
+    def read_image(self, ref):
+        raise AssertionError("no images in these tests")
 
 
 def summary(sid, title, path, edited=T1, parent=None):
@@ -55,7 +58,7 @@ def test_sync_writes_cache_and_notes(setup):
         }
     )
     seen = []
-    result = sync_workspace(ws, source, repos.notes, on_change=seen.append)
+    result = sync_workspace(ws, source, repos.notes, repos.images, on_change=seen.append)
 
     assert [(c.kind, c.path[-1]) for c in seen] == [
         (Change.ADDED, "Interview"),
@@ -76,11 +79,11 @@ def test_sync_writes_cache_and_notes(setup):
 def test_resync_updates_in_place_and_handles_rename(setup):
     repos, ws = setup
     source = FakeSource({SUB: (summary(SUB, "Redis", ("I", "Redis")), "v1\n")})
-    sync_workspace(ws, source, repos.notes)
+    sync_workspace(ws, source, repos.notes, repos.images)
     first = repos.notes.get_by_source_id(ws.id, SUB)
 
     source.notes[SUB] = (summary(SUB, "Redis Basics", ("I", "Redis Basics")), "v2\n")
-    sync_workspace(ws, source, repos.notes)
+    sync_workspace(ws, source, repos.notes, repos.images)
 
     files = sorted(p.name for p in (ws.path / "cache").iterdir())
     assert files == ["redis-basics-22222222.md"]
@@ -92,7 +95,9 @@ def test_resync_updates_in_place_and_handles_rename(setup):
 
 def test_removing_workspace_removes_its_notes(setup):
     repos, ws = setup
-    sync_workspace(ws, FakeSource({SUB: (summary(SUB, "R", ("R",)), "x\n")}), repos.notes)
+    sync_workspace(
+        ws, FakeSource({SUB: (summary(SUB, "R", ("R",)), "x\n")}), repos.notes, repos.images
+    )
     repos.workspaces.remove(ws.user_id, ws.name)
     assert repos.notes.list(ws.id) == []
 
@@ -158,14 +163,14 @@ def test_notion_source_paths_databases_and_block_cache():
     assert source.skipped_databases == ["Cards"]
 
     calls_after_listing = len(client.calls)
-    assert source.fetch("a") == "hi\n\n→ Sub-page: Persistence\n"
+    assert source.fetch("a").markdown == "hi\n\n→ Sub-page: Persistence\n"
     assert len(client.calls) == calls_after_listing  # served from the block cache
     assert source.block_types["paragraph"] == 1
 
 
 def test_cache_dir_is_inside_workspace(setup):
     repos, ws = setup
-    result = sync_workspace(ws, FakeSource({}), repos.notes)
+    result = sync_workspace(ws, FakeSource({}), repos.notes, repos.images)
     assert result.cache_dir == Path(ws.path) / "cache" and result.cache_dir.is_dir()
 
 
@@ -224,14 +229,14 @@ def baseline(setup):
             C: (summary(C, "Behaviour", ("I", "Behaviour")), "star\n"),
         }
     )
-    sync_workspace(ws, source, repos.notes)
+    sync_workspace(ws, source, repos.notes, repos.images)
     source.fetched.clear()
     return repos, ws, source
 
 
 def test_unchanged_notes_are_not_downloaded_again(setup):
     repos, ws, source = baseline(setup)
-    result = sync_workspace(ws, source, repos.notes)
+    result = sync_workspace(ws, source, repos.notes, repos.images)
     assert set(kinds(result).values()) == {Change.UNCHANGED}
     assert source.fetched == [] and result.downloaded == 0
 
@@ -244,7 +249,7 @@ def test_added_changed_deleted(setup):
     source.notes[new] = (summary(new, "Graphs", ("I", "Graphs"), T2), "bfs\n")
     del source.notes[C]
 
-    result = sync_workspace(ws, source, repos.notes)
+    result = sync_workspace(ws, source, repos.notes, repos.images)
     assert kinds(result) == {
         "Redis": Change.CHANGED,
         "Graphs": Change.ADDED,
@@ -261,7 +266,7 @@ def test_rename_and_move_with_same_content(setup):
     repos, ws, source = baseline(setup)
     T2 = datetime(2026, 11, 24, 11, 0, tzinfo=UTC)
     source.notes[B] = (summary(B, "Databases", ("I", "Storage", "Databases"), T2), "db\n")
-    result = sync_workspace(ws, source, repos.notes)
+    result = sync_workspace(ws, source, repos.notes, repos.images)
     change = next(c for c in result.changes if c.source_id == B)
     assert change.kind == Change.RENAMED
     assert change.previous_path == ("I", "Database")
@@ -273,23 +278,23 @@ def test_edit_in_the_same_minute_as_last_sync_is_still_caught(setup):
     repos, ws = setup
     this_minute = datetime.now(UTC).replace(second=0, microsecond=0)
     source = FakeSource({A: (summary(A, "Redis", ("Redis",), this_minute), "v1\n")})
-    sync_workspace(ws, source, repos.notes)
+    sync_workspace(ws, source, repos.notes, repos.images)
 
     # Edited seconds later: Notion still reports the same (rounded) last-edited time.
     source.notes[A] = (summary(A, "Redis", ("Redis",), this_minute), "v2\n")
-    result = sync_workspace(ws, source, repos.notes)
+    result = sync_workspace(ws, source, repos.notes, repos.images)
     assert kinds(result) == {"Redis": Change.CHANGED}
 
 
 def test_missing_cache_file_or_full_forces_download(setup):
     repos, ws, source = baseline(setup)
     (ws.path / "cache" / cache_filename("Redis", A)).unlink()
-    sync_workspace(ws, source, repos.notes)
+    sync_workspace(ws, source, repos.notes, repos.images)
     assert source.fetched == [A]
     assert (ws.path / "cache" / cache_filename("Redis", A)).is_file()
 
     source.fetched.clear()
-    result = sync_workspace(ws, source, repos.notes, full=True)
+    result = sync_workspace(ws, source, repos.notes, repos.images, full=True)
     assert sorted(source.fetched) == sorted([A, B, C])
     assert set(kinds(result).values()) == {Change.UNCHANGED}
 
@@ -312,28 +317,28 @@ def test_parent_is_refreshed_when_a_sub_page_is_renamed_added_or_deleted(setup):
             X: (summary(X, "DSA", ("Top", "DSA"), parent=P), "trees\n"),
         }
     )
-    sync_workspace(ws, source, repos.notes)
+    sync_workspace(ws, source, repos.notes, repos.images)
 
     # Rename X; the parent's timestamp stays the same but its content now shows the new title.
     T2 = datetime(2026, 11, 24, 11, 0, tzinfo=UTC)
     source.notes[X] = (summary(X, "DSA 2", ("Top", "DSA 2"), T2, parent=P), "trees\n")
     source.notes[P] = (summary(P, "Top", ("Top",)), "→ Sub-page: DSA 2\n")
-    result = sync_workspace(ws, source, repos.notes)
+    result = sync_workspace(ws, source, repos.notes, repos.images)
     assert kinds(result) == {"Top": Change.CHANGED, "DSA 2": Change.RENAMED}
 
     # Nothing changed: nothing is downloaded.
     source.fetched.clear()
-    sync_workspace(ws, source, repos.notes)
+    sync_workspace(ws, source, repos.notes, repos.images)
     assert source.fetched == []
 
     # Add Y, then delete it: the parent is downloaded both times.
     source.notes[Y] = (summary(Y, "Graphs", ("Top", "Graphs"), T2, parent=P), "bfs\n")
-    sync_workspace(ws, source, repos.notes)
+    sync_workspace(ws, source, repos.notes, repos.images)
     assert sorted(source.fetched) == sorted([P, Y])
 
     source.fetched.clear()
     del source.notes[Y]
-    result = sync_workspace(ws, source, repos.notes)
+    result = sync_workspace(ws, source, repos.notes, repos.images)
     assert source.fetched == [P]
     assert kinds(result)["Graphs"] == Change.DELETED
 
@@ -348,10 +353,10 @@ def test_moving_a_page_refreshes_old_and_new_parent(setup):
             X: (summary(X, "X", ("One", "X"), parent=P1), "x\n"),
         }
     )
-    sync_workspace(ws, source, repos.notes)
+    sync_workspace(ws, source, repos.notes, repos.images)
     source.fetched.clear()
 
     source.notes[X] = (summary(X, "X", ("Two", "X"), parent=P2), "x\n")
-    result = sync_workspace(ws, source, repos.notes)
+    result = sync_workspace(ws, source, repos.notes, repos.images)
     assert sorted(source.fetched) == sorted([P1, P2, X])
     assert kinds(result)["X"] == Change.RENAMED

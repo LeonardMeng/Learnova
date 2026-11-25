@@ -12,8 +12,14 @@ from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
-from learnova.storage.repositories import NoteRepository, UserRepository, WorkspaceRepository
+from learnova.storage.repositories import (
+    ImageRepository,
+    NoteRepository,
+    UserRepository,
+    WorkspaceRepository,
+)
 from learnova.storage.sqlalchemy_repos import (
+    SqlImageRepository,
     SqlNoteRepository,
     SqlUserRepository,
     SqlWorkspaceRepository,
@@ -27,6 +33,7 @@ class Repositories:
     users: UserRepository
     workspaces: WorkspaceRepository
     notes: NoteRepository
+    images: ImageRepository
 
 
 def make_engine(url: str) -> Engine:
@@ -65,4 +72,5 @@ def open_repositories(url: str) -> Repositories:
         users=SqlUserRepository(sessions),
         workspaces=SqlWorkspaceRepository(sessions),
         notes=SqlNoteRepository(sessions),
+        images=SqlImageRepository(sessions),
     )

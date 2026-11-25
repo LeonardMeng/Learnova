@@ -1,7 +1,8 @@
 """Reads every note from a Source into the workspace and reports what changed since last time.
 
-Each note is one Markdown file in cache/ and one row in the database. A note is downloaded only
-when it might have changed; see `_can_skip` for why that needs a one-minute margin."""
+Each note is one Markdown file in cache/ and one row in the database; its images are files in
+images/ (named by content hash) and rows in note_images. A note is downloaded only when it might
+have changed; see `_can_skip` for why that needs a one-minute margin."""
 
 from __future__ import annotations
 
@@ -14,11 +15,12 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 
-from learnova.models import Note, NoteSummary, Workspace
+from learnova.models import ImageRef, Note, NoteImage, NoteSummary, Workspace
 from learnova.sources.base import NoteSource
-from learnova.storage.repositories import NoteRepository
+from learnova.storage.repositories import ImageRepository, NoteRepository
 
 CACHE_DIR = "cache"
+IMAGES_DIR = "images"
 # A parent's Markdown lists its sub-pages by title, but Notion doesn't bump the parent's
 # last-edited time when a sub-page is renamed. So whenever a note is added, renamed, moved or
 # deleted, its parent (old and new) is downloaded again too; see `_parents_to_refresh`.
@@ -50,6 +52,8 @@ class SyncResult:
     changes: list[NoteChange]
     cache_dir: Path
     downloaded: int  # notes whose content was fetched
+    images_downloaded: int = 0
+    image_errors: tuple[str, ...] = ()
 
     def of(self, kind: Change) -> list[NoteChange]:
         return [c for c in self.changes if c.kind == kind]
@@ -61,8 +65,139 @@ def cache_filename(title: str, source_id: str) -> str:
     return f"{slug}-{source_id.replace('-', '')[:8]}.md"
 
 
-def content_hash(markdown: str) -> str:
-    return hashlib.sha256(markdown.encode()).hexdigest()
+def content_hash(markdown: str, image_keys: tuple[str, ...] = ()) -> str:
+    """Hash of the note's text plus which image files it shows, so replacing an image counts as
+    a change even when the text is identical. Notes without images hash their text alone."""
+    data = markdown + "".join(f"\n{key}" for key in image_keys)
+    return hashlib.sha256(data.encode()).hexdigest()
+
+
+# --- images ----------------------------------------------------------------------------------
+
+_SIGNATURES = [
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+]
+_EXTENSIONS = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+}
+
+
+def sniff_mime(data: bytes) -> str:
+    """Image type from the file's first bytes (more reliable than a URL or a header)."""
+    for signature, mime in _SIGNATURES:
+        if data.startswith(signature):
+            return mime
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if b"<svg" in data[:1024].lower():
+        return "image/svg+xml"
+    return "application/octet-stream"
+
+
+_REGION = re.compile(r"<!-- image:(?P<id>[\w-]+) -->(?:.*?<!-- /image:(?P=id) -->)?", re.S)
+
+
+def render_images(markdown: str, images: dict[str, NoteImage]) -> str:
+    """Expand each image placeholder (or a block written by an earlier run) into the image link
+    and its description. Running it again on its own output gives the same result."""
+    return _REGION.sub(lambda m: _image_block(m["id"], images.get(m["id"])), markdown)
+
+
+def _image_block(block_id: str, image: NoteImage | None) -> str:
+    lines = [f"<!-- image:{block_id} -->"]
+    if image is None or image.path is None:
+        caption = f": {image.caption}" if image and image.caption else ""
+        lines.append(f"*[image could not be downloaded{caption}]*")
+    else:
+        alt = (image.caption or "image").replace("]", "\\]").replace("\n", " ")
+        lines.append(f"![{alt}](../{image.path})")
+        if image.description:
+            by = f" ({image.described_by})" if image.described_by else ""
+            body = "\n".join(f"> {line}".rstrip() for line in image.description.strip().split("\n"))
+            lines += ["", f"> **Image description**{by}:", body]
+        else:
+            lines.append("*(not described yet)*")
+    lines.append(f"<!-- /image:{block_id} -->")
+    return "\n".join(lines)
+
+
+def write_cache_file(
+    workspace: Workspace, summary: NoteSummary, markdown: str, images: list[NoteImage]
+) -> Path:
+    path = workspace.path / CACHE_DIR / cache_filename(summary.title, summary.source_id)
+    body = render_images(markdown, {i.block_id: i for i in images})
+    path.write_text(front_matter(summary) + body, encoding="utf-8")
+    return path
+
+
+def refresh_image_blocks(workspace: Workspace, note: Note, images: list[NoteImage]) -> None:
+    """Rewrite the image blocks of an existing cache file, e.g. after a description arrives."""
+    path = workspace.path / CACHE_DIR / cache_filename(note.title, note.source_id)
+    if path.is_file():
+        text = path.read_text(encoding="utf-8")
+        path.write_text(render_images(text, {i.block_id: i for i in images}), encoding="utf-8")
+
+
+def _sync_images(
+    workspace: Workspace,
+    note: Note,
+    refs: tuple[ImageRef, ...],
+    source: NoteSource,
+    images: ImageRepository,
+    errors: list[str],
+) -> tuple[list[NoteImage], int]:
+    """Download new or replaced images of one note and forget removed ones."""
+    existing = {i.block_id: i for i in images.list_for_note(note.id)}
+    folder = workspace.path / IMAGES_DIR
+    folder.mkdir(exist_ok=True)
+    result, downloaded = [], 0
+    for ref in refs:
+        old = existing.pop(ref.block_id, None)
+        if (
+            old is not None
+            and old.source_key == ref.source_key
+            and old.path
+            and (workspace.path / old.path).is_file()
+        ):
+            # Same file as last time: keep it (and its description), just refresh the caption.
+            result.append(images.save(note.id, ref, old.path, old.image_hash, old.mime_type))
+            continue
+        try:
+            data = source.read_image(ref)
+        except Exception as e:  # network or HTTP error; the note is still synced
+            errors.append(f"{' / '.join(note.path)}: image {ref.block_id}: {e}")
+            result.append(images.save(note.id, ref, None, None, None))
+            continue
+        digest = hashlib.sha256(data).hexdigest()
+        mime = sniff_mime(data)
+        rel = f"{IMAGES_DIR}/{digest[:16]}{_EXTENSIONS.get(mime, '.bin')}"
+        if not (workspace.path / rel).exists():
+            (workspace.path / rel).write_bytes(data)
+        result.append(images.save(note.id, ref, rel, digest, mime))
+        downloaded += 1
+    for gone in existing.values():
+        images.delete(gone.id)
+    return result, downloaded
+
+
+def _remove_unused_image_files(workspace: Workspace, images: ImageRepository) -> None:
+    folder = workspace.path / IMAGES_DIR
+    if not folder.is_dir():
+        return
+    used = {i.path for i in images.list_for_workspace(workspace.id) if i.path}
+    for file in folder.iterdir():
+        if file.is_file() and f"{IMAGES_DIR}/{file.name}" not in used:
+            file.unlink()
+
+
+# --- notes -----------------------------------------------------------------------------------
 
 
 def front_matter(summary: NoteSummary) -> str:
@@ -113,15 +248,18 @@ def sync_workspace(
     workspace: Workspace,
     source: NoteSource,
     notes: NoteRepository,
+    images: ImageRepository,
     on_change: Callable[[NoteChange], None] | None = None,
     full: bool = False,
 ) -> SyncResult:
-    """Bring cache/ and the notes table in line with the source. `full` re-downloads every note."""
+    """Bring cache/, images/ and the database in line with the source. `full` re-downloads every
+    note (images whose file is unchanged are still not downloaded again)."""
     cache = workspace.path / CACHE_DIR
     cache.mkdir(exist_ok=True)
     stored = {n.source_id: n for n in notes.list(workspace.id)}
     changes: list[NoteChange] = []
-    downloaded = 0
+    image_errors: list[str] = []
+    downloaded = images_downloaded = 0
 
     def emit(change: NoteChange) -> None:
         changes.append(change)
@@ -145,13 +283,17 @@ def sync_workspace(
             emit(NoteChange(Change.UNCHANGED, summary.source_id, summary.path))
             continue
 
-        body = source.fetch(summary.source_id)
+        content = source.fetch(summary.source_id)
         downloaded += 1
-        new_hash = content_hash(body)
+        new_hash = content_hash(content.markdown, tuple(r.source_key for r in content.images))
         if previous is not None and previous.title != summary.title:
             (cache / cache_filename(previous.title, previous.source_id)).unlink(missing_ok=True)
-        cache_file.write_text(front_matter(summary) + body, encoding="utf-8")
-        notes.upsert(workspace.id, summary, new_hash, synced_at=datetime.now(UTC))
+        note = notes.upsert(workspace.id, summary, new_hash, synced_at=datetime.now(UTC))
+        note_images, count = _sync_images(
+            workspace, note, content.images, source, images, image_errors
+        )
+        images_downloaded += count
+        write_cache_file(workspace, summary, content.markdown, note_images)
 
         if previous is None:
             emit(NoteChange(Change.ADDED, summary.source_id, summary.path))
@@ -169,7 +311,14 @@ def sync_workspace(
         if source_id in seen:
             continue
         (cache / cache_filename(previous.title, source_id)).unlink(missing_ok=True)
-        notes.delete(workspace.id, source_id)
+        notes.delete(workspace.id, source_id)  # its note_images rows go with it
         emit(NoteChange(Change.DELETED, source_id, previous.path))
 
-    return SyncResult(changes=changes, cache_dir=cache, downloaded=downloaded)
+    _remove_unused_image_files(workspace, images)
+    return SyncResult(
+        changes=changes,
+        cache_dir=cache,
+        downloaded=downloaded,
+        images_downloaded=images_downloaded,
+        image_errors=tuple(image_errors),
+    )

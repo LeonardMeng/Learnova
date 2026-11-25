@@ -53,3 +53,36 @@ class Note(BaseModel):
     last_edited: datetime
     content_hash: str
     synced_at: datetime
+
+
+class ImageRef(BaseModel):
+    """An image found in a note, before it is downloaded."""
+
+    model_config = ConfigDict(frozen=True)
+
+    block_id: str  # where the image sits in the note
+    source_key: str  # identifies the file itself; stays the same while the image is unchanged
+    url: str  # where to download it now (Notion's links expire after an hour)
+    caption: str = ""
+
+
+class NoteContent(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    markdown: str  # images appear as <!-- image:BLOCK_ID --> placeholders
+    images: tuple[ImageRef, ...] = ()
+
+
+class NoteImage(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    note_id: uuid.UUID
+    block_id: str
+    source_key: str
+    caption: str
+    path: str | None  # relative to the workspace, e.g. images/3fa9c1d2e4b5a6f7.png; None if failed
+    image_hash: str | None  # sha256 of the file
+    mime_type: str | None
+    description: str | None
+    described_by: str | None  # "provider:model" that wrote the description

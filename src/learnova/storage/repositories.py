@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 
-from learnova.models import Note, NoteSummary, User, Workspace
+from learnova.models import ImageRef, Note, NoteImage, NoteSummary, User, Workspace
 
 
 class WorkspaceNotFound(LookupError):
@@ -79,3 +79,33 @@ class NoteRepository(ABC):
     @abstractmethod
     def delete(self, workspace_id: uuid.UUID, source_id: str) -> None:
         """Remove the note if it exists."""
+
+
+class ImageRepository(ABC):
+    @abstractmethod
+    def list_for_note(self, note_id: uuid.UUID) -> list[NoteImage]: ...
+
+    @abstractmethod
+    def list_for_workspace(self, workspace_id: uuid.UUID) -> list[NoteImage]: ...
+
+    @abstractmethod
+    def save(
+        self,
+        note_id: uuid.UUID,
+        ref: ImageRef,
+        path: str | None,
+        image_hash: str | None,
+        mime_type: str | None,
+    ) -> NoteImage:
+        """Insert or update the image at (note, block). The description is kept when the image
+        hash is unchanged and cleared when it changes."""
+
+    @abstractmethod
+    def delete(self, image_id: uuid.UUID) -> None: ...
+
+    @abstractmethod
+    def find_description(self, image_hash: str) -> tuple[str, str | None] | None:
+        """(description, described_by) from any image with this hash, in any workspace."""
+
+    @abstractmethod
+    def set_description(self, image_id: uuid.UUID, description: str, described_by: str) -> None: ...

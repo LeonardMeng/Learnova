@@ -12,6 +12,7 @@ from learnova.cli.common import repositories, short_path, user_errors
 from learnova.config import load_settings
 from learnova.home import WORKSPACE_FILE
 from learnova.llm import factory
+from learnova.services import images as images_service
 from learnova.services.workspaces import WorkspaceError, WorkspaceService
 from learnova.sources import notion
 from learnova.sources.notion_markdown import PLACEHOLDER_TYPES, SUPPORTED_TYPES
@@ -55,6 +56,9 @@ def sync(
     full: Annotated[
         bool, typer.Option("--full", help="Re-download every note, even unchanged ones.")
     ] = False,
+    no_describe: Annotated[
+        bool, typer.Option("--no-describe", help="Don't send new images to the vision model.")
+    ] = False,
 ) -> None:
     """Read the workspace's Notion pages into cache/ and report what changed."""
     with user_errors():
@@ -64,7 +68,9 @@ def sync(
             raise WorkspaceError(f"Workspace directory {ws.path} not found (moved or deleted?).")
         source = notion.NotionSource(notion.make_client(), ws.notion_page_id)
         typer.echo(f"Syncing {ws.name!r} from Notion…")
-        result = sync_workspace(ws, source, repos.notes, on_change=_print_change, full=full)
+        result = sync_workspace(
+            ws, source, repos.notes, repos.images, on_change=_print_change, full=full
+        )
 
     counts = ", ".join(f"{len(result.of(kind))} {kind}" for kind in Change)
     typer.echo(f"\n{counts}.")
@@ -74,6 +80,40 @@ def sync(
     if source.skipped_databases:
         names = ", ".join(repr(n) for n in source.skipped_databases)
         typer.echo(f"Skipped {len(source.skipped_databases)} database(s): {names}")
+    if result.images_downloaded:
+        typer.echo(f"Images: {result.images_downloaded} downloaded")
+    for error in result.image_errors:
+        typer.secho(f"  ! {error}", fg=typer.colors.YELLOW)
+    if not no_describe:
+        with user_errors():
+            _describe_images(ws, repos)
+
+
+def _describe_images(ws, repos) -> None:
+    pending = images_service.pending_images(repos, ws)
+    if not pending:
+        return
+    settings = load_settings().models
+    try:
+        model = factory.vision_model(settings)
+    except factory.LLMConfigError as e:
+        typer.secho(
+            f"{len(pending)} image(s) waiting for a description. {e}", fg=typer.colors.YELLOW
+        )
+        return
+    typer.echo(f"\nDescribing {len(pending)} image(s) with {settings.vision}…")
+    result = images_service.describe_pending(
+        ws,
+        repos,
+        model,
+        settings.vision,
+        on_image=lambda img, outcome: typer.echo(
+            f"  {'✓' if outcome != 'failed' else '!'} {img.path} {outcome}"
+        ),
+    )
+    typer.echo(f"Images: {result.described} described, {result.reused} reused.")
+    for error in result.errors:
+        typer.secho(f"  ! {error}", fg=typer.colors.YELLOW)
 
 
 def _print_change(change: NoteChange) -> None:

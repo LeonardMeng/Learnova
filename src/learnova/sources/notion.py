@@ -11,10 +11,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
+import httpx
 from notion_client import Client
 from notion_client.helpers import collect_paginated_api, iterate_paginated_api
 
-from learnova.models import NoteSummary
+from learnova.models import ImageRef, NoteContent, NoteSummary
 from learnova.sources.base import NoteSource
 from learnova.sources.notion_markdown import MarkdownConverter
 
@@ -137,8 +138,15 @@ class NotionSource(NoteSource):
             )
         return notes
 
-    def fetch(self, note_id: str) -> str:
-        return MarkdownConverter(self._children, self.block_types).page(note_id)
+    def fetch(self, note_id: str) -> NoteContent:
+        converter = MarkdownConverter(self._children, self.block_types)
+        markdown = converter.page(note_id)
+        return NoteContent(markdown=markdown, images=tuple(converter.images))
+
+    def read_image(self, ref: ImageRef) -> bytes:
+        response = httpx.get(ref.url, follow_redirects=True, timeout=60)
+        response.raise_for_status()
+        return response.content
 
     def _children(self, block_id: str) -> list[dict[str, Any]]:
         if block_id not in self._blocks:

@@ -21,3 +21,4 @@ The full spec is in docs/SPEC.md. Read it before starting any task.
 - [x] Milestone 3: Read content
 - [x] Milestone 4: Change detection
 - [x] Milestone 5: Connect models
+- [x] Milestone 6: Images

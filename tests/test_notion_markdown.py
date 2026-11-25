@@ -8,8 +8,8 @@ def rt(text, **ann):
     return {"type": "text", "plain_text": text, "annotations": ann, "href": href}
 
 
-def blk(id, type, children=None, **data):
-    return {"id": id, "type": type, "has_children": bool(children), type: data}, children or []
+def blk(id, btype, children=None, **data):
+    return {"id": id, "type": btype, "has_children": bool(children), btype: data}, children or []
 
 
 def convert(*items):
@@ -26,6 +26,21 @@ def convert(*items):
     counts = Counter()
     md = MarkdownConverter(lambda bid: tree.get(bid, []), counts).page("page")
     return md, counts
+
+
+def convert_with_images(*items):
+    tree = {}
+
+    def register(parent, pairs):
+        tree[parent] = [b for b, _ in pairs]
+        for b, kids in pairs:
+            if kids:
+                register(b["id"], kids)
+
+    register("page", list(items))
+    counts = Counter()
+    converter = MarkdownConverter(lambda bid: tree.get(bid, []), counts)
+    return converter.page("page"), counts, converter.images
 
 
 def test_rich_text_annotations_and_links():
@@ -80,14 +95,18 @@ def test_code_quote_toggle_table_equation_divider():
 
 
 def test_pages_columns_placeholders_and_unknown_blocks():
-    md, counts = convert(
+    md, counts, images = convert_with_images(
         blk("cl", "column_list", [
             blk("c1", "column", [blk("p1", "paragraph", rich_text=[rt("left")])]),
             blk("c2", "column", [blk("p2", "paragraph", rich_text=[rt("right")])]),
         ]),
         blk("sub", "child_page", title="Persistence"),
         blk("db", "child_database", title="Cards"),
-        blk("img", "image", caption=[rt("diagram")]),
+        blk("img", "image", caption=[rt("diagram")], type="file",
+            file={"url": "https://s3.example/ws/file-1/tree.png?X-Amz-Signature=abc"}),
+        blk("ext", "image", caption=[], type="external",
+            external={"url": "https://example.com/pic.png?size=2"}),
+        blk("nolink", "image", caption=[rt("lost")], type="file_upload", file_upload={"id": "u"}),
         blk("f", "pdf", name="slides.pdf"),
         blk("toc", "table_of_contents"),
         blk("w", "mystery_block"),
@@ -95,11 +114,16 @@ def test_pages_columns_placeholders_and_unknown_blocks():
     assert md.startswith("left\n\nright\n\n")
     assert "→ Sub-page: Persistence" in md
     assert "→ Database (not synced): Cards" in md
-    assert f"{image_placeholder('img')}\n*Image: diagram*" in md
+    assert f"{image_placeholder('img')}\n\n{image_placeholder('ext')}" in md
+    assert "*[image not available: lost]*" in md
+    assert [(i.block_id, i.source_key, i.caption) for i in images] == [
+        ("img", "https://s3.example/ws/file-1/tree.png", "diagram"),  # signature dropped
+        ("ext", "https://example.com/pic.png?size=2", ""),  # external links kept whole
+    ]
     assert "[pdf attachment not supported in v1: slides.pdf]" in md
     assert "table_of_contents" not in md
     assert '<!-- unsupported: "mystery_block" -->' in md
-    assert counts["image"] == 1 and counts["paragraph"] == 2 and counts["mystery_block"] == 1
+    assert counts["image"] == 3 and counts["paragraph"] == 2 and counts["mystery_block"] == 1
 
 
 def test_all_heading_levels():

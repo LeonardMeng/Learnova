@@ -10,15 +10,16 @@ from pathlib import Path
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from learnova.models import Note, NoteSummary, User, Workspace
+from learnova.models import ImageRef, Note, NoteImage, NoteSummary, User, Workspace
 from learnova.storage.repositories import (
+    ImageRepository,
     NoteRepository,
     UserRepository,
     WorkspaceNameTaken,
     WorkspaceNotFound,
     WorkspaceRepository,
 )
-from learnova.storage.tables import NoteRow, UserRow, WorkspaceRow
+from learnova.storage.tables import NoteImageRow, NoteRow, UserRow, WorkspaceRow
 
 LOCAL_USER_NAME = "local"
 
@@ -49,6 +50,21 @@ def _note(row: NoteRow) -> Note:
         last_edited=row.last_edited_at,
         content_hash=row.content_hash,
         synced_at=row.synced_at,
+    )
+
+
+def _image(row: NoteImageRow) -> NoteImage:
+    return NoteImage(
+        id=row.id,
+        note_id=row.note_id,
+        block_id=row.block_id,
+        source_key=row.source_key,
+        caption=row.caption,
+        path=row.path,
+        image_hash=row.image_hash,
+        mime_type=row.mime_type,
+        description=row.description,
+        described_by=row.described_by,
     )
 
 
@@ -188,3 +204,66 @@ class SqlNoteRepository(NoteRepository):
                 NoteRow.workspace_id == workspace_id, NoteRow.source_id == source_id
             )
         ).first()
+
+
+class SqlImageRepository(ImageRepository):
+    def __init__(self, sessions: sessionmaker[Session]):
+        self._sessions = sessions
+
+    def list_for_note(self, note_id) -> list[NoteImage]:
+        with self._sessions() as s:
+            rows = s.scalars(select(NoteImageRow).where(NoteImageRow.note_id == note_id))
+            return [_image(r) for r in rows]
+
+    def list_for_workspace(self, workspace_id) -> list[NoteImage]:
+        with self._sessions() as s:
+            rows = s.scalars(
+                select(NoteImageRow)
+                .join(NoteRow, NoteRow.id == NoteImageRow.note_id)
+                .where(NoteRow.workspace_id == workspace_id)
+            )
+            return [_image(r) for r in rows]
+
+    def save(self, note_id, ref: ImageRef, path, image_hash, mime_type) -> NoteImage:
+        with self._sessions.begin() as s:
+            row = s.scalars(
+                select(NoteImageRow).where(
+                    NoteImageRow.note_id == note_id, NoteImageRow.block_id == ref.block_id
+                )
+            ).first()
+            if row is None:
+                row = NoteImageRow(note_id=note_id, block_id=ref.block_id)
+                s.add(row)
+            if row.image_hash != image_hash:
+                row.description = None
+                row.described_by = None
+            row.source_key = ref.source_key
+            row.caption = ref.caption
+            row.path = path
+            row.image_hash = image_hash
+            row.mime_type = mime_type
+            s.flush()
+            return _image(row)
+
+    def delete(self, image_id) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(NoteImageRow, image_id)
+            if row is not None:
+                s.delete(row)
+
+    def find_description(self, image_hash) -> tuple[str, str | None] | None:
+        with self._sessions() as s:
+            row = s.scalars(
+                select(NoteImageRow).where(
+                    NoteImageRow.image_hash == image_hash,
+                    NoteImageRow.description.is_not(None),
+                )
+            ).first()
+            return (row.description, row.described_by) if row else None
+
+    def set_description(self, image_id, description, described_by) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(NoteImageRow, image_id)
+            if row is not None:
+                row.description = description
+                row.described_by = described_by

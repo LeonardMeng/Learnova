@@ -1,6 +1,6 @@
 """Turns a Notion page's block tree into Markdown. It only needs a function that returns a block's
-children, so it can be tested with plain dicts and no API calls. Images and other attachments
-become placeholders (images are handled in Milestone 6)."""
+children, so it can be tested with plain dicts and no API calls. Images become placeholders and
+are collected in `images` for sync to download; other attachments get a placeholder line."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ import json
 from collections import Counter
 from collections.abc import Callable
 from typing import Any
+
+from learnova.models import ImageRef
 
 Block = dict[str, Any]
 ChildrenFn = Callable[[str], list[Block]]
@@ -24,7 +26,7 @@ SUPPORTED_TYPES = HEADING_TYPES | {
 
 
 def image_placeholder(block_id: str) -> str:
-    """Marker that Milestone 6 replaces with the image's text description."""
+    """Marker that sync expands into the image link and its description."""
     return f"<!-- image:{block_id} -->"
 
 
@@ -70,6 +72,7 @@ class MarkdownConverter:
     def __init__(self, children: ChildrenFn, block_types: Counter[str] | None = None):
         self._children = children
         self.block_types = block_types if block_types is not None else Counter()
+        self.images: list[ImageRef] = []
 
     def page(self, page_id: str) -> str:
         return self._render_all(self._children(page_id)).strip() + "\n"
@@ -158,11 +161,25 @@ class MarkdownConverter:
             return f"[{label}]({url})"
         if btype == "image":
             caption = rich_text(data.get("caption", []))
-            marker = image_placeholder(block["id"])
-            return f"{marker}\n*Image: {caption}*" if caption else marker
+            ref = _image_ref(block["id"], data, caption)
+            if ref is None:
+                return f"*[image not available: {caption or 'no link'}]*"
+            self.images.append(ref)
+            return image_placeholder(block["id"])
         if btype in ("file", "pdf", "video", "audio"):
             name = data.get("name") or rich_text(data.get("caption", [])) or "(unnamed)"
             return f"[{btype} attachment not supported in v1: {name}]"
         if btype in SKIPPED_TYPES:
             return None
         return f"<!-- unsupported: {json.dumps(btype)} -->"
+
+
+def _image_ref(block_id: str, data: dict[str, Any], caption: str) -> ImageRef | None:
+    kind = data.get("type")
+    url = (data.get(kind) or {}).get("url") if kind in ("file", "external") else None
+    if not url:
+        return None
+    # Notion-hosted files get a freshly signed link on every request; the part before "?"
+    # names the file and stays the same. External links are used as they are.
+    key = url.split("?", 1)[0] if kind == "file" else url
+    return ImageRef(block_id=block_id, source_key=key, url=url, caption=caption)

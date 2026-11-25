@@ -105,8 +105,9 @@ class Answer:
     output_tokens: int | None
 
 
-def ask(model: BaseChatModel, question: str) -> Answer:
-    """Send one question and time it. Provider errors become LLMCallError with a short message."""
+def ask(model: BaseChatModel, question: str | list) -> Answer:
+    """Send one question (text, or a list of messages, e.g. text plus an image) and time it.
+    Provider errors become LLMCallError with a short message."""
     start = time.perf_counter()
     try:
         reply = model.invoke(question)

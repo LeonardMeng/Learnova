@@ -6,7 +6,16 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, String, UniqueConstraint, Uuid
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    MetaData,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -83,3 +92,19 @@ class NoteRow(Base):
     last_edited_at: Mapped[datetime] = mapped_column(UTCDateTime)
     content_hash: Mapped[str] = mapped_column(String(64))  # sha256 of the Markdown body
     synced_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class NoteImageRow(Base):
+    __tablename__ = "note_images"
+    __table_args__ = (UniqueConstraint("note_id", "block_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    note_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("notes.id", ondelete="CASCADE"))
+    block_id: Mapped[str] = mapped_column(String(64))
+    source_key: Mapped[str] = mapped_column(Text)  # identifies the file in the source
+    caption: Mapped[str] = mapped_column(Text, default="")
+    path: Mapped[str | None] = mapped_column(String(1024))  # relative to the workspace
+    image_hash: Mapped[str | None] = mapped_column(String(64), index=True)  # description cache key
+    mime_type: Mapped[str | None] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text)
+    described_by: Mapped[str | None] = mapped_column(String(200))
