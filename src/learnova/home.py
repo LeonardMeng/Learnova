@@ -19,6 +19,16 @@ DEFAULT_CONFIG = """\
 [database]
 # Leave unset to use SQLite at <user home>/learnova.db.
 # url = "postgresql+psycopg://user:password@localhost/learnova"
+
+[models]
+# Format: "provider:model". Providers: openai, anthropic, google_genai (or google), deepseek.
+# main = "openai:<model-name>"
+# vision = "openai:<model-name>"   # used to describe images; may differ from main
+
+[models.api_key_env]
+# Which environment variable holds each provider's key. Unlisted providers use the standard
+# name: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, DEEPSEEK_API_KEY.
+# openai = "MODEL_API_KEY"
 """
 
 

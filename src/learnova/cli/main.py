@@ -9,7 +9,9 @@ import typer
 
 from learnova.cli import workspace
 from learnova.cli.common import repositories, short_path, user_errors
+from learnova.config import load_settings
 from learnova.home import WORKSPACE_FILE
+from learnova.llm import factory
 from learnova.services.workspaces import WorkspaceError, WorkspaceService
 from learnova.sources import notion
 from learnova.sources.notion_markdown import PLACEHOLDER_TYPES, SUPPORTED_TYPES
@@ -92,6 +94,36 @@ def _block_types(counts) -> str:
         return btype
 
     return ", ".join(f"{label(t)} {n}" for t, n in counts.most_common()) or "(none)"
+
+
+@app.command()
+def ask(
+    question: Annotated[str, typer.Argument(help="What to ask.")],
+    model: Annotated[
+        str | None,
+        typer.Option("--model", "-m", help="provider:model to use instead of the configured one."),
+    ] = None,
+    vision: Annotated[
+        bool, typer.Option("--vision", help="Ask the configured vision model instead.")
+    ] = False,
+) -> None:
+    """Debug: ask a model one question to check the model setup works."""
+    with user_errors():
+        settings = load_settings().models
+        if model:
+            chat, label = factory.chat_model(model, settings), model
+        elif vision:
+            chat, label = factory.vision_model(settings), settings.vision
+        else:
+            chat, label = factory.main_model(settings), settings.main
+        answer = factory.ask(chat, question)
+    typer.echo(answer.text)
+    tokens = (
+        f" · {answer.input_tokens} in / {answer.output_tokens} out tokens"
+        if answer.input_tokens is not None
+        else ""
+    )
+    typer.secho(f"\n{label} · {answer.seconds:.1f}s{tokens}", dim=True)
 
 
 if __name__ == "__main__":
