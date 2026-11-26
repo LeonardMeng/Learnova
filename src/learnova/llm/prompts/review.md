@@ -32,6 +32,14 @@ Put in `new_points` only points the note covers that none of the labels above al
 For each, set importance from 1 to 5: 5 = core idea of the topic, likely to be asked about;
 3 = useful detail; 1 = trivia.
 
+For each new point you may set `parent`: the point it is a kind of, or a part of ("X is a kind of
+Y"). Use a T-label from the topics below, a P-label from the list above, or N1, N2, … for
+another of your `new_points` (in the order you listed them). Use null if none fits well; don't
+force it.
+
+Topics the student already has (points with other points under them):
+{topics}
+
 # 2. Issues already recorded for this note
 
 Open issues (found by an earlier review):

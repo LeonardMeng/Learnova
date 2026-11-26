@@ -175,7 +175,8 @@ def candidates(
     config: weights_mod.WeightConfig,
     workspace_name: str | None = None,
 ) -> list[QuizItem]:
-    """Points that come from at least one note (in that workspace, if named), with weights."""
+    """Points that come from at least one note (in that workspace, if named), with weights.
+    Topics (points with other points under them) are not quizzed."""
     user = repos.users.get_or_create_local()
     if workspace_name is not None and workspace_name not in {
         w.name for w in repos.workspaces.list(user.id)
@@ -187,8 +188,11 @@ def candidates(
     for s in repos.knowledge.sources(user.id):
         by_point.setdefault(s.point_id, []).append(s)
     mastery = repos.attempts.mastery(user.id)
+    topics = {link.parent_id for link in repos.knowledge.parents(user.id)}
     items = []
     for point in repos.knowledge.list_for_user(user.id):
+        if point.id in topics:
+            continue
         sources = by_point.get(point.id, [])
         if workspace_name is not None:
             sources = [s for s in sources if s.workspace_name == workspace_name]

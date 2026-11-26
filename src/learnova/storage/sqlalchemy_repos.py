@@ -24,6 +24,7 @@ from learnova.models import (
     Note,
     NoteImage,
     NoteSummary,
+    ParentLink,
     PointSource,
     QuestionType,
     ReviewIssue,
@@ -53,6 +54,7 @@ from learnova.storage.tables import (
     AttemptRow,
     IssuedQuestionRow,
     KnowledgePointRow,
+    KpParentRow,
     KpSourceRow,
     MasteryRow,
     NoteBlockRow,
@@ -466,11 +468,27 @@ class SqlKnowledgeRepository(KnowledgeRepository):
             if row is not None:
                 s.delete(row)
 
-    def merge(self, point_id, into_id, mastery_from: MasteryFn) -> KnowledgePoint:
+    def parents(self, user_id) -> list[ParentLink]:
+        with self._sessions() as s:
+            return [_parent(r) for r in s.scalars(_user_links(user_id))]
+
+    def restructure(self, user_id, new_points, parents) -> None:
+        with self._sessions.begin() as s:
+            for p in new_points:
+                s.add(KnowledgePointRow(
+                    id=p.id, user_id=user_id, name=p.name, summary=p.summary,
+                    importance=p.importance, created_at=p.created_at, updated_at=p.updated_at,
+                ))  # fmt: skip
+            s.flush()
+            _replace_links(s, user_id, parents)
+
+    def merge(self, point_id, into_id, mastery_from: MasteryFn, parents=None) -> KnowledgePoint:
         with self._sessions.begin() as s:
             point, into = s.get(KnowledgePointRow, point_id), s.get(KnowledgePointRow, into_id)
             if point is None or into is None:
                 raise PointNotFound(str(point_id if point is None else into_id))
+            if parents is not None:
+                _replace_links(s, into.user_id, parents)
             kept_notes = set(
                 s.scalars(select(KpSourceRow.note_id).where(KpSourceRow.point_id == into_id))
             )
@@ -500,6 +518,25 @@ class SqlKnowledgeRepository(KnowledgeRepository):
             into.updated_at = utcnow()
             s.flush()
             return _point(into)
+
+
+def _user_links(user_id):
+    points = select(KnowledgePointRow.id).where(KnowledgePointRow.user_id == user_id)
+    return select(KpParentRow).where(KpParentRow.child_id.in_(points))
+
+
+def _replace_links(s: Session, user_id, parents: list[ParentLink]) -> None:
+    for row in s.scalars(_user_links(user_id)).all():
+        s.delete(row)
+    s.flush()
+    for link in parents:
+        s.add(KpParentRow(child_id=link.child_id, parent_id=link.parent_id,
+                          is_primary=link.primary))  # fmt: skip
+    s.flush()
+
+
+def _parent(row: KpParentRow) -> ParentLink:
+    return ParentLink(child_id=row.child_id, parent_id=row.parent_id, primary=row.is_primary)
 
 
 def _attempt(row: AttemptRow) -> Attempt:

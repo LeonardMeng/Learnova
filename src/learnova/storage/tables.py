@@ -130,6 +130,21 @@ class KnowledgePointRow(Base):
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
+class KpParentRow(Base):
+    """A knowledge point under another one (services/hierarchy.py keeps the rules: one primary
+    parent, up to 2 shortcuts, no loops, depth 4). Deleting either point removes the link."""
+
+    __tablename__ = "kp_parents"
+
+    child_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_points.id", ondelete="CASCADE"), primary_key=True
+    )
+    parent_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_points.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    is_primary: Mapped[bool] = mapped_column()
+
+
 class KpSourceRow(Base):
     """Links a knowledge point to a note. Deleting either side removes only the link."""
 

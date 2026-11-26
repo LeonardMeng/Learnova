@@ -232,14 +232,48 @@ upgrading to this version, run `learnova sync --full` (to record each note's par
 links) and then `learnova review --all` once so issues from earlier reviews are
 recorded (until then they exist only in old report files).
 
-### `learnova kp list [--workspace NAME]`
+### `learnova kp list [--workspace NAME] [--flat]`
 
-Lists your knowledge points, most important first, with the notes they come from. Points belong
-to you, not to a workspace; `--workspace` shows only points from that workspace.
+Lists your knowledge points as a tree, with the notes they come from. Each point sits under its
+parent, with the most important first. A point with points under it is a **topic**: it shows its
+mastery (the importance-weighted average of the quizzed points under it, e.g. `62% · 4 of 7
+quizzed`) and is not quizzed itself. "↗ also under" marks a shortcut. Points belong to you, not
+to a workspace; `--workspace` shows only points from that workspace (and the topics above them).
+`--flat` gives one list, most important first.
 
 ```bash
 learnova kp list
 learnova kp list -w interview
+learnova kp list --flat
+```
+
+### `learnova kp move POINT --under PARENT` / `--top`, `kp link`, `kp unlink`
+
+Arrange points by hand. Every point lives under at most one parent; `link` also shows it under up
+to 2 other parents (shortcuts). Loops and trees deeper than 4 levels are refused with a message.
+
+```bash
+learnova kp move "RDB snapshots" --under "Redis persistence"
+learnova kp move "Redis persistence" --top
+learnova kp link "Eviction" --also-under "Caching"
+learnova kp unlink "Eviction" --from "Caching"
+```
+
+A review can also put a new point under one of your topics or the note's other points.
+
+### `learnova kp organize [--workspace NAME] [--dry-run] [--yes]`
+
+Asks the model to organize your points: new topics, moves and shortcuts. Every change is checked
+against the rules above; the ones that break them are marked refused. The proposal is printed and
+written to `reports/<date>-organize.md` (in the workspace with `--workspace`, otherwise in
+`~/.learnova/reports/`). Then you confirm once, and all the changes that can be applied are
+applied together. `--dry-run` only writes the proposal; `--yes` applies without asking. With
+`--workspace`, only that workspace's points are moved; topics from other workspaces can still
+be their parents.
+
+```bash
+learnova kp organize -w interview --dry-run
+learnova kp organize
 ```
 
 ### `learnova kp importance POINT VALUE`
@@ -254,7 +288,10 @@ learnova kp importance "Redis persistence: RDB vs AOF" 5
 ### `learnova kp merge POINT --into EXISTING`
 
 Merges a duplicate point into another: the kept point gets all of the duplicate's notes and quiz
-attempts, its mastery is recomputed from all of them, and the duplicate is removed. The review report prints this command under each possible duplicate.
+attempts, its mastery is recomputed from all of them, and the duplicate is removed. Points under
+the duplicate move to the kept point; the kept point stays where it is (or takes the duplicate's
+place if it was at the top level). The review report prints this command under each possible
+duplicate.
 
 ```bash
 learnova kp merge "GD" --into "Gradient descent"

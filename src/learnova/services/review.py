@@ -29,6 +29,7 @@ from learnova.models import (
     ReviewIssue,
     Workspace,
 )
+from learnova.services import hierarchy
 from learnova.services.issues import fingerprint, is_same_issue
 from learnova.storage.database import Repositories
 from learnova.sync import CACHE_DIR, cache_filename
@@ -51,6 +52,7 @@ class NewPoint(BaseModel):
     name: str
     summary: str
     importance: int  # 1-5
+    parent: str | None = None  # T-, P- or N-label of the point it is a kind or part of
 
 
 class Issue(BaseModel):
@@ -99,6 +101,7 @@ class ReviewRequest:
     existing: dict[str, KnowledgePoint]  # "P1" -> point
     open_issues: dict[str, ReviewIssue] = field(default_factory=dict)  # "I1" -> issue
     dismissed: dict[str, ReviewIssue] = field(default_factory=dict)  # "D1": don't raise again
+    topics: dict[str, KnowledgePoint] = field(default_factory=dict)  # "T1": possible parents
 
 
 @dataclass(frozen=True)
@@ -213,7 +216,11 @@ def _review_one(
         f"D{i}": x
         for i, x in enumerate(repos.issues.list_for_note(note.id, [IssueStatus.DISMISSED]), 1)
     }
-    review = reviewer(ReviewRequest(note, markdown, others, existing, open_issues, dismissed))
+    graph = hierarchy.load(repos, user_id)
+    topics = {f"T{i}": p for i, p in enumerate(_topics(graph), 1)}
+    review = reviewer(
+        ReviewRequest(note, markdown, others, existing, open_issues, dismissed, topics)
+    )
     result = NoteResult(note)
 
     # 1. Decide what happens to each existing point. Anything not mentioned is kept.
@@ -289,6 +296,8 @@ def _review_one(
             PointOutcome(Status.NEW, point, possible_duplicate=matches.get(new_ref))
         )
 
+    _place_new_points(repos, user_id, new, by_label, topics, result)
+
     blocks = repos.notes.blocks(note.id)
     if note.issues_hash is not None and note.issues_hash == note.content_hash:
         # The text hasn't changed since its issues were last reviewed, so whatever the model says
@@ -301,6 +310,40 @@ def _review_one(
                        blocks, anchor_threshold)  # fmt: skip
         repos.notes.mark_issues_reviewed(note.id, note.content_hash)
     return result
+
+
+MAX_TOPICS = 100  # topics offered as parents in one review
+
+
+def _topics(graph: hierarchy.Graph) -> list[KnowledgePoint]:
+    topics = sorted(graph.topics(), key=lambda p: (graph.depth(p.id), p.name.lower()))
+    return topics[:MAX_TOPICS]
+
+
+def _place_new_points(repos, user_id, new, by_label, topics, result) -> None:
+    """Put each new point under the parent the model chose, if that is allowed."""
+    wanted = [
+        (by_label[ref], (item.parent or "").strip())
+        for ref, item in new.items()
+        if (item.parent or "").strip()
+    ]
+    if not wanted:
+        return
+    graph = hierarchy.load(repos, user_id)
+    labels = {**by_label, **topics}
+    changed = False
+    for point, label in wanted:
+        parent = labels.get(label)
+        if parent is None:
+            result.warnings.append(f"Unknown parent {label!r} for {point.name!r}; left at the top.")
+            continue
+        try:
+            graph.move(point.id, parent.id)
+            changed = True
+        except hierarchy.HierarchyError as e:
+            result.warnings.append(f"{point.name!r} not put under {parent.name!r}: {e}")
+    if changed:
+        hierarchy.save(repos, user_id, graph)
 
 
 def _reanchor(repos, issues, blocks, threshold) -> None:
@@ -427,6 +470,8 @@ def llm_reviewer(model) -> Reviewer:
             or "(none: return an empty `issue_status` list)",
             dismissed_issues="\n".join(_issue_line(r, x) for r, x in req.dismissed.items())
             or "(none)",
+            topics="\n".join(f"{ref}  {p.name}: {p.summary[:120]}" for ref, p in req.topics.items())
+            or "(none yet)",
         )
         return factory.ask_structured(model, NoteReview, prompt)
 

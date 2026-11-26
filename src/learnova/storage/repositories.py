@@ -21,6 +21,7 @@ from learnova.models import (
     Note,
     NoteImage,
     NoteSummary,
+    ParentLink,
     PointSource,
     QuestionType,
     ReviewIssue,
@@ -202,10 +203,26 @@ class KnowledgeRepository(ABC):
 
     @abstractmethod
     def merge(
-        self, point_id: uuid.UUID, into_id: uuid.UUID, mastery_from: MasteryFn
+        self,
+        point_id: uuid.UUID,
+        into_id: uuid.UUID,
+        mastery_from: MasteryFn,
+        parents: list[ParentLink] | None = None,
     ) -> KnowledgePoint:
         """In one transaction: move point_id's note links and attempts onto into_id, rebuild
-        into_id's mastery from all its attempts, and delete point_id. Raises PointNotFound."""
+        into_id's mastery from all its attempts, and delete point_id. Raises PointNotFound.
+        If `parents` is given, it replaces all of the user's parent links (see restructure)."""
+
+    @abstractmethod
+    def parents(self, user_id: uuid.UUID) -> list[ParentLink]:
+        """All parent links between the user's points."""
+
+    @abstractmethod
+    def restructure(
+        self, user_id: uuid.UUID, new_points: list[KnowledgePoint], parents: list[ParentLink]
+    ) -> None:
+        """In one transaction: add `new_points` (with their ids) and replace all of the user's
+        parent links with `parents`. The caller has checked the rules."""
 
 
 class AttemptRepository(ABC):

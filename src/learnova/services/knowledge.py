@@ -1,5 +1,5 @@
 """Managing knowledge points by hand: listing them, finding one by name or id, changing its
-importance, and merging duplicates."""
+importance, and merging duplicates (children and parents included, see hierarchy.py)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from learnova.config import load_settings
 from learnova.errors import LearnovaError, NotFoundError
 from learnova.models import KnowledgePoint, PointSource
 from learnova.scheduler.mastery import replay
+from learnova.services import hierarchy
 from learnova.services.review import where
 from learnova.storage.database import Repositories
 
@@ -56,6 +57,24 @@ def list_points(repos: Repositories, workspace_name: str | None = None) -> list[
     return sorted(listings, key=lambda item: (-item.point.importance, item.point.name.lower()))
 
 
+@dataclass(frozen=True)
+class TreeListing:
+    row: hierarchy.TreeRow
+    sources: list[PointSource]
+
+
+def point_tree(repos: Repositories, workspace_name: str | None = None) -> list[TreeListing]:
+    """Your points as a tree (see hierarchy.tree); with a workspace, its points and the topics
+    above them."""
+    listings = list_points(repos, workspace_name)
+    user = repos.users.get_or_create_local()
+    graph = hierarchy.load(repos, user.id)
+    only = {item.point.id for item in listings} if workspace_name is not None else None
+    sources = {item.point.id: item.sources for item in list_points(repos)}
+    rows = hierarchy.tree(graph, repos.attempts.mastery(user.id), only)
+    return [TreeListing(row, sources.get(row.point.id, [])) for row in rows]
+
+
 def set_importance(repos: Repositories, text: str, importance: int) -> KnowledgePoint:
     if not 1 <= importance <= 5:
         raise KnowledgeError("Importance must be from 1 to 5.")
@@ -88,7 +107,10 @@ def merge_points(repos: Repositories, point_text: str, into_text: str) -> MergeR
     if point.id == into.id:
         raise KnowledgeError("That's the same knowledge point.")
     config = load_settings().mastery
-    kept = repos.knowledge.merge(point.id, into.id, lambda attempts: replay(attempts, config))
     user = repos.users.get_or_create_local()
+    links = hierarchy.merged_links(hierarchy.load(repos, user.id), point.id, into.id)
+    kept = repos.knowledge.merge(
+        point.id, into.id, lambda attempts: replay(attempts, config), links
+    )
     count = sum(1 for s in repos.knowledge.sources(user.id) if s.point_id == kept.id)
     return MergeResult(merged=point, into=kept, source_count=count)

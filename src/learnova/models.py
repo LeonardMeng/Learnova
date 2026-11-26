@@ -118,6 +118,17 @@ class KnowledgePoint(BaseModel):
     updated_at: datetime
 
 
+class ParentLink(BaseModel):
+    """A knowledge point under another one. The primary parent is where the point lives;
+    secondary ones are shortcuts ("also under")."""
+
+    model_config = ConfigDict(frozen=True)
+
+    child_id: uuid.UUID
+    parent_id: uuid.UUID
+    primary: bool
+
+
 class PointSource(BaseModel):
     """Where a knowledge point comes from: one note, in one workspace."""
 
