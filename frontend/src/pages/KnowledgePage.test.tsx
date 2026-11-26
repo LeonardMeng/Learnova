@@ -111,6 +111,26 @@ describe("Knowledge page", () => {
     expect(calls.filter((c) => c.method === "PATCH")[3].body).toEqual({ shortcuts: [] });
   });
 
+  it("follows the selected topic in the stat strip", async () => {
+    mockApi(routes());
+    const user = userEvent.setup();
+    renderApp("/");
+    const t = await screen.findByRole("list", { name: "Knowledge tree" });
+    const stat = (label: string) =>
+      screen.getByText(label, { selector: ".stat .muted" }).nextSibling;
+    expect(stat("Points")).toHaveTextContent("3");
+
+    await user.click(within(t).getByRole("button", { name: "Redis" }));
+    expect(await screen.findByText(/Showing topic/)).toBeInTheDocument();
+    expect(stat("Points")).toHaveTextContent("1");
+    expect(stat("Average mastery")).toHaveTextContent("0.50");
+    expect(stat("Open issues")).toHaveTextContent("2");
+
+    await user.click(screen.getByRole("button", { name: "Show all" }));
+    expect(stat("Points")).toHaveTextContent("3");
+    expect(screen.queryByText(/Showing topic/)).toBeNull();
+  });
+
   it("redirects /status to the Knowledge page", async () => {
     mockApi(routes());
     renderApp("/status");

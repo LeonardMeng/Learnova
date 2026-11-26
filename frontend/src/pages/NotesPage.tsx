@@ -57,9 +57,11 @@ export function NotesPage() {
           <PageIcon icon={note.icon} />
           <button className="link" onClick={() => select(note.id)}>{note.title}</button>
           <span className="row-meta">
-            {note.ignored && <span className="muted small">ignored</span>}
-            {note.points > 0 && <span className="muted small" title="Knowledge points">{note.points} pt</span>}
-            <IssueBadge count={note.open_issues} />
+            <span className="muted small meta-points"
+                  title={note.ignored ? "Hidden by .learnovaignore" : note.points > 0 ? "Knowledge points" : undefined}>
+              {note.ignored ? "ignored" : note.points > 0 ? `${note.points} pt` : ""}
+            </span>
+            <span className="meta-issues"><IssueBadge count={note.open_issues} /></span>
           </span>
         </div>
         {children.length > 0 && !closed.has(note.id) && <ul className="tree">{render(children, depth + 1)}</ul>}
@@ -70,7 +72,7 @@ export function NotesPage() {
     <section>
       <div className="page-head">
         <h1>{name}</h1>
-        <Link to={`/sync?workspace=${encodeURIComponent(name)}`}>Sync &amp; review</Link>
+        <Link to={`/management?workspace=${encodeURIComponent(name)}`}>Management</Link>
       </div>
       <div className="split">
         <div className="card tree-card">

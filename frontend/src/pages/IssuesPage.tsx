@@ -97,22 +97,25 @@ function IssueRow({ issue, busy, onChange }: {
   return (
     <li className={`issue issue-${issue.status}`} aria-label={`${KIND_LABEL[issue.kind]}: ${issue.problem}`}>
       <div className="issue-head">
-        <strong>{KIND_LABEL[issue.kind]}</strong>
-        <span className="muted">
-          {issue.workspace ? `${issue.workspace}: ` : ""}{issue.note_path.join(" / ")} · priority {issue.priority}
-          {issue.status !== "open" && <> · {issue.status} {when(issue.closed_at)}</>}
-        </span>
-        <span className="spacer" />
-        {issue.url && <a href={issue.url} target="_blank" rel="noreferrer">Open in Notion</a>}
-        {issue.status === "open" && (
-          <>
-            <button className="secondary small" disabled={busy} onClick={() => onChange("fixed")}>Fix</button>
-            <button className="secondary small" disabled={busy} onClick={() => onChange("dismissed")}>Dismiss</button>
-          </>
-        )}
-        {(issue.status === "fixed" || issue.status === "dismissed") && (
-          <button className="secondary small" disabled={busy} onClick={() => onChange("open")}>Reopen</button>
-        )}
+        <div className="issue-title">
+          <strong>{KIND_LABEL[issue.kind]}</strong>
+          <span className="muted">
+            {issue.workspace ? `${issue.workspace}: ` : ""}{issue.note_path.join(" / ")} · priority {issue.priority}
+            {issue.status !== "open" && <> · {issue.status} {when(issue.closed_at)}</>}
+          </span>
+        </div>
+        <div className="issue-actions">
+          {issue.url && <a href={issue.url} target="_blank" rel="noreferrer">Open in Notion</a>}
+          {issue.status === "open" && (
+            <>
+              <button className="secondary small" disabled={busy} onClick={() => onChange("fixed")}>Fix</button>
+              <button className="secondary small" disabled={busy} onClick={() => onChange("dismissed")}>Dismiss</button>
+            </>
+          )}
+          {(issue.status === "fixed" || issue.status === "dismissed") && (
+            <button className="secondary small" disabled={busy} onClick={() => onChange("open")}>Reopen</button>
+          )}
+        </div>
       </div>
       {issue.kind === "missing" ? <p>Missing: <strong>{issue.topic}</strong></p> : <blockquote>{issue.quote}</blockquote>}
       <p>{issue.problem}</p>

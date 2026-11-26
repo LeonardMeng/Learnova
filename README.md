@@ -333,8 +333,9 @@ A browser interface on top of the API, in `frontend/` (React + Vite + TypeScript
 (with a search box for points) opens the pages; each page you open gets a tab above the page,
 and the tabs are remembered in the browser.
 
-- **Knowledge › Overview** (the first page): points, average mastery, open issues and last quiz;
-  the tree of points (topics open and close; ↗ shortcuts jump to the point's own place); and the
+- **Knowledge › Overview** (the first page): points, average mastery, open issues and last quiz,
+  for everything or for the selected point (a topic counts every point under it); the tree of
+  points (topics open and close; ↗ shortcuts jump to the point's own place); and the
   selected point's details: where it lives, its notes, open issues, quiz answers with a score
   trend, and controls for importance, "Move to…" and shortcuts. The sidebar search filters the
   points and shows where each one lives and "also in: …".
@@ -343,7 +344,10 @@ and the tabs are remembered in the browser.
   (A–D, T/F, Ctrl/⌘+Enter); a reload continues the current question.
 - **Workspaces › History**: coming soon.
 - **Workspaces › Issues**: open issues by priority, with a Notion link, Fix and Dismiss.
-- **Workspaces › Sync & review**: the Sync and Review buttons for a workspace.
+- **Workspaces › Management**: the Sync and Review buttons for a workspace, and **Add new
+  workspace**: paste the Notion page link and press Check (if Notion can't see the page, it says
+  how to share it with the integration), then give a name and a folder. The folder gets an
+  empty `.learnovaignore`; then press Sync from Notion. (`/sync` still opens this page.)
 - **Workspaces › one entry per workspace**: its Notion page tree with the pages' icons; a page
   shows its knowledge points and issues.
 - **Workspaces › Web imports**: the sites imported with `learnova web import`.
@@ -351,7 +355,8 @@ and the tabs are remembered in the browser.
   workspace's report files below.
 
 Pages with a workspace picker show one workspace or all of them; the choice is kept in the URL.
-Page icons appear after the next `learnova sync`.
+Page icons appear after the next `learnova sync`. The top bar's theme button switches System,
+Light and Dark; the choice is kept in this browser (System follows the computer).
 
 One-time setup (needs Node 20+):
 

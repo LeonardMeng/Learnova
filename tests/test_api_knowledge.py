@@ -189,3 +189,39 @@ def test_web_imports_and_me(client, repos):
 
 def test_unused_names_kept_for_lint():
     assert NoteSummary and DB
+
+
+def test_check_notion_page_then_create_a_workspace(client, monkeypatch, tmp_path):
+    from learnova.sources import notion
+    from learnova.sources.notion import NotionConfigError
+
+    monkeypatch.setattr(notion, "make_client", lambda: None)
+    monkeypatch.setattr(notion, "page_title", lambda client, page_id: "Graph Theory: Basics")
+    page = "3e6135e3ecf04389846ce4126df126b0"
+    r = client.post(
+        "/api/notion/check", json={"notion_page": f"https://www.notion.so/Graph-{page}"}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "page_id": "3e6135e3-ecf0-4389-846c-e4126df126b0",
+        "title": "Graph Theory: Basics",
+        "suggested_name": "graph-theory-basics",
+    }
+    r = client.post("/api/notion/check", json={"notion_page": "not a page"})
+    assert r.status_code == 400 and "Could not find a Notion page ID" in r.json()["error"]
+
+    def hidden(client, page_id):
+        raise NotionConfigError("Notion can't see that page.")
+
+    monkeypatch.setattr(notion, "page_title", hidden)
+    assert client.post("/api/notion/check", json={"notion_page": page}).status_code == 400
+
+    monkeypatch.setattr(notion, "page_title", lambda client, page_id: "Graph Theory")
+    folder = tmp_path / "new" / "graphs"
+    r = client.post(
+        "/api/workspaces", json={"name": "graphs", "notion_page": page, "path": str(folder)}
+    )
+    assert r.status_code == 201, r.text
+    assert (folder / ".learnovaignore").is_file()  # created with only comments: nothing left out
+    assert all(line.startswith("#") or not line.strip()
+               for line in (folder / ".learnovaignore").read_text().splitlines())  # fmt: skip

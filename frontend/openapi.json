@@ -477,6 +477,49 @@
         }
       }
     },
+    "/api/notion/check": {
+      "post": {
+        "tags": [
+          "notes",
+          "workspaces"
+        ],
+        "summary": "Check Notion Page",
+        "description": "Whether Learnova can see a Notion page, before creating a workspace for it. If it can't,\nthe error says how to share the page with the integration.",
+        "operationId": "check_notion_page_api_notion_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotionCheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotionCheckOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/web-imports": {
       "get": {
         "tags": [
@@ -1790,6 +1833,43 @@
           "notion_url"
         ],
         "title": "NoteRefOut"
+      },
+      "NotionCheckIn": {
+        "properties": {
+          "notion_page": {
+            "type": "string",
+            "title": "Notion Page",
+            "description": "Notion page ID or URL"
+          }
+        },
+        "type": "object",
+        "required": [
+          "notion_page"
+        ],
+        "title": "NotionCheckIn"
+      },
+      "NotionCheckOut": {
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "title": "Page Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "suggested_name": {
+            "type": "string",
+            "title": "Suggested Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page_id",
+          "title",
+          "suggested_name"
+        ],
+        "title": "NotionCheckOut"
       },
       "PointDetailOut": {
         "properties": {

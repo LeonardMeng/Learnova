@@ -4,6 +4,8 @@ import type { components } from "./schema";
 
 type S = components["schemas"];
 export type Workspace = S["WorkspaceOut"];
+export type CreatedWorkspace = S["CreatedWorkspaceOut"];
+export type NotionCheck = S["NotionCheckOut"];
 export type Status = S["StatusOut"];
 export type Summary = S["SummaryOut"];
 export type Point = S["PointOut"];
@@ -76,6 +78,10 @@ const ws = (name: string) => `/api/workspaces/${encodeURIComponent(name)}`;
 export const api = {
   me: () => request<{ name: string }>("GET", "/api/me"),
   workspaces: () => request<Workspace[]>("GET", "/api/workspaces"),
+  checkNotion: (notion_page: string) => request<NotionCheck>("POST", "/api/notion/check", { notion_page }),
+  createWorkspace: (name: string, notion_page: string, path: string) =>
+    request<CreatedWorkspace>("POST", "/api/workspaces", { name, notion_page, path }),
+  setDefault: (name: string) => request<Workspace>("PUT", `${ws(name)}/default`),
   status: (workspace: string | null, weakest = 10) =>
     request<Status>("GET", `/api/status${query({ workspace, weakest })}`),
   points: (workspace: string | null) => request<Point[]>("GET", `/api/points${query({ workspace })}`),

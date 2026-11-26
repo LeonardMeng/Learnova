@@ -43,10 +43,17 @@ Version 2.2 (see "Version 2.2" in docs/SPEC.md):
 - [x] Milestone 3: Knowledge hierarchy
 - [x] Milestone 4: Knowledge base as the first page; Issues page
 - [x] Milestone 5: Quiz on chosen points or a topic
-- [ ] Milestone 6: Issues as Notion comments (optional, off by default)
+- ~~Milestone 6: Issues as Notion comments~~: dropped, no longer needed
 
 Version 2.3:
 - [x] `web import` (one-time, into Notion) and `web check` (diff report against the local cache)
 
-Version 2.4 (not started; after Version 2.2):
-- [ ] Bookmark questions, add questions by hand, guided workspace setup
+Version 2.4 (NEXT: start here; see "Version 2.4" in docs/SPEC.md, plan one item at a time):
+- [x] Web app polish (2026-11-26)
+- [x] Milestone 1: Management page (was "Sync & review") with an "Add new workspace" button
+- [ ] Milestone 2: Sync and review per workspace on the Management page
+
+Version 3 (not started; see "Version 3" in docs/SPEC.md):
+- [ ] Milestone 1: Bookmark questions
+- [ ] Milestone 2: Add questions by hand
+- [ ] Milestone 3: Guided workspace setup

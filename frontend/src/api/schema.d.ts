@@ -179,6 +179,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notion/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Notion Page
+         * @description Whether Learnova can see a Notion page, before creating a workspace for it. If it can't,
+         *     the error says how to share the page with the integration.
+         */
+        post: operations["check_notion_page_api_notion_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/web-imports": {
         parameters: {
             query?: never;
@@ -668,6 +689,23 @@ export interface components {
             path: string[];
             /** Notion Url */
             notion_url: string;
+        };
+        /** NotionCheckIn */
+        NotionCheckIn: {
+            /**
+             * Notion Page
+             * @description Notion page ID or URL
+             */
+            notion_page: string;
+        };
+        /** NotionCheckOut */
+        NotionCheckOut: {
+            /** Page Id */
+            page_id: string;
+            /** Title */
+            title: string;
+            /** Suggested Name */
+            suggested_name: string;
         };
         /** PointDetailOut */
         PointDetailOut: {
@@ -1447,6 +1485,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NoteDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_notion_page_api_notion_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotionCheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotionCheckOut"];
                 };
             };
             /** @description Validation Error */

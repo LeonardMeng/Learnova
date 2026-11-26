@@ -9,12 +9,15 @@
 .nav-item { padding: 5px 10px 5px 22px; border-radius: 6px; color: var(--text); text-decoration: none; }
 .nav-item:hover { background: var(--track); }
 .nav-item.active { background: var(--accent); color: var(--accent-text); }
+.nav-icon { display: inline-block; width: 1.4em; text-align: center; }
 
 .main-column { min-width: 0; display: flex; flex-direction: column; }
 .topbar { display: flex; align-items: center; padding: 8px 20px; background: var(--card); border-bottom: 1px solid var(--line); gap: 12px; position: static; }
 .spacer { flex: 1; }
 .user { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
 .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+.theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 96px; background: var(--card); color: var(--text); border-color: var(--line); }
+.theme-toggle:hover:not(:disabled) { border-color: var(--accent); }
 .tabs { display: flex; gap: 4px; padding: 6px 12px 0; border-bottom: 1px solid var(--line); background: var(--bg); overflow-x: auto; }
 .tab { display: inline-flex; align-items: center; border: 1px solid var(--line); border-bottom: none; border-radius: 8px 8px 0 0; background: var(--track); }
 .tab.active { background: var(--card); }
@@ -25,7 +28,7 @@ main { max-width: none; width: 100%; margin: 0; padding: 20px 24px 60px; }
 .page-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .page-head h1 { margin: 0; flex: 1; }
 .section-title { margin: 24px 0 10px; }
-.split { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(320px, 1.1fr); gap: 16px; align-items: start; }
+.split { display: grid; grid-template-columns: minmax(380px, 1.15fr) minmax(340px, 1fr); gap: 16px; align-items: start; }
 .detail-column { position: sticky; top: 12px; }
 .tree, .results, .plain, .issues { list-style: none; margin: 0; padding: 0; }
 .tree-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; }
@@ -35,7 +38,13 @@ main { max-width: none; width: 100%; margin: 0; padding: 20px 24px 60px; }
 .tree-row.ignored { opacity: 0.55; }
 .twisty { width: 18px; flex: none; background: none; border: none; color: var(--muted); padding: 0; }
 .topic-name { font-weight: 600; }
-.row-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.row-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.meta-practice { width: 46px; text-align: right; }
+.meta-mastery { width: 104px; display: inline-flex; justify-content: flex-end; }
+.meta-importance { width: 26px; text-align: right; }
+.meta-issues { width: 32px; display: inline-flex; justify-content: flex-end; }
+.meta-points { width: 56px; text-align: right; }
+.tree-row input[type="checkbox"] { flex: none; }
 .importance { color: var(--muted); font-size: 0.85em; }
 .badge { background: var(--bad); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 0.8em; font-weight: 700; }
 .page-icon { width: 1.2em; display: inline-block; text-align: center; }
@@ -47,14 +56,16 @@ img.page-icon { height: 1.1em; object-fit: contain; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; }
 .plain li { padding: 3px 0; }
-.attempts li { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: baseline; }
+.attempts li { display: grid; grid-template-columns: 72px 132px minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 4px 0; }
 .score { white-space: nowrap; }
 .attempts .muted { white-space: nowrap; }
 .sparkline { color: var(--accent); display: block; margin: 4px 0 8px; }
 .small { font-size: 0.85em; }
 button.small { padding: 3px 10px; }
 .issue { border-bottom: 1px solid var(--line); padding: 10px 0; }
-.issue-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.issue-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.issue-title { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; min-width: 0; }
+.issue-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
 .issue blockquote { margin: 6px 0; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--muted); }
 .issue p { margin: 4px 0; }
 .issue-fixed, .issue-dismissed, .issue-obsolete { opacity: 0.7; }
@@ -69,3 +80,7 @@ button.small { padding: 3px 10px; }
 .practice { visibility: hidden; }
 .tree-row:hover .practice, .tree-row .practice:focus { visibility: visible; }
 .scope { background: var(--track); border-radius: 8px; padding: 6px 12px; }
+.add-workspace { max-width: 640px; }
+.field.wide { max-width: none; }
+.field .row { display: flex; gap: 8px; }
+.field .row input { flex: 1; }

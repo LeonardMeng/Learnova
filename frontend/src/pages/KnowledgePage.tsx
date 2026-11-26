@@ -10,6 +10,45 @@ import { scopedQuizUrl } from "../quiz/session";
 import { useWorkspace } from "../workspace";
 import { PointDetailPanel } from "./PointDetail";
 
+type Scope = {
+  points: number;
+  mastery: number | null;
+  issues: number;
+  last: string | null;
+};
+
+/** The figures for one selected point: its own, or for a topic every point under it (shortcuts
+ * included, each once), matching how the API works out a topic's mastery. */
+function scopeOf(rows: TreePoint[], root: TreePoint): Scope {
+  const children = new Map<string, string[]>();
+  const add = (parent: string, child: string) =>
+    children.set(parent, [...(children.get(parent) ?? []), child]);
+  for (const row of rows) {
+    if (row.parent_id) add(row.parent_id, row.id);
+    for (const shortcut of row.shortcuts) add(shortcut, row.id);
+  }
+  const seen = new Set<string>();
+  const todo = [...(children.get(root.id) ?? [])];
+  while (todo.length) {
+    const id = todo.pop()!;
+    if (id === root.id || seen.has(id)) continue;
+    seen.add(id);
+    todo.push(...(children.get(id) ?? []));
+  }
+  const nodes = [root, ...rows.filter((row) => seen.has(row.id))];
+  return {
+    points: root.topic ? root.topic.total : 1,
+    mastery: root.topic ? root.topic.mastery : root.mastery,
+    issues: nodes.reduce((count, row) => count + row.open_issues, 0),
+    last:
+      nodes
+        .map((row) => row.last_reviewed)
+        .filter((date): date is string => date !== null)
+        .sort()
+        .pop() ?? null,
+  };
+}
+
 export function KnowledgePage() {
   const [workspace] = useWorkspace();
   const [params, setParams] = useSearchParams();
@@ -41,6 +80,8 @@ export function KnowledgePage() {
 
   const rows = tree.data ?? [];
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
+  const selectedRow = selected ? byId.get(selected) : undefined;
+  const scope = selectedRow ? scopeOf(rows, selectedRow) : null;
 
   /** Open every topic above a point, then select it (used by shortcuts and search results). */
   const reveal = (id: string) => {
@@ -56,12 +97,23 @@ export function KnowledgePage() {
         <h1>Knowledge</h1>
         <WorkspacePicker />
       </div>
-      {status.data && (
+      {scope && selectedRow && (
+        <p className="scope-note">
+          Showing {selectedRow.topic ? "topic" : "point"} <strong>{selectedRow.name}</strong>
+          <button className="link small" onClick={() => select(null)}>
+            Show all
+          </button>
+        </p>
+      )}
+      {(status.data || scope) && (
         <div className="stats">
-          <Stat label="Points" value={status.data.overall.points} />
-          <Stat label="Average mastery" value={<MasteryBar value={status.data.overall.average_mastery} />} />
-          <Stat label="Open issues" value={issues.data?.length ?? "…"} />
-          <Stat label="Last quiz" value={when(status.data.overall.last_quiz)} />
+          <Stat label="Points" value={scope ? scope.points : status.data!.overall.points} />
+          <Stat
+            label="Average mastery"
+            value={<MasteryBar value={scope ? scope.mastery : status.data!.overall.average_mastery} />}
+          />
+          <Stat label="Open issues" value={scope ? scope.issues : (issues.data?.length ?? "…")} />
+          <Stat label="Last quiz" value={when(scope ? scope.last : status.data!.overall.last_quiz)} />
         </div>
       )}
       <div className="split">
@@ -77,7 +129,7 @@ export function KnowledgePage() {
           {tree.isPending && <Spinner label="Loading…" />}
           {tree.isError && <ErrorBox error={tree.error} onRetry={() => tree.refetch()} />}
           {tree.data?.length === 0 && (
-            <p>No knowledge points yet. Sync and review a workspace first (Workspaces › Sync &amp; review).</p>
+            <p>No knowledge points yet. Sync and review a workspace first (Workspaces › Management).</p>
           )}
           {tree.data && tree.data.length > 0 &&
             (q.trim() ? (
@@ -164,20 +216,22 @@ function Tree({ rows, byId, expanded, setExpanded, selected, onSelect, onJump, c
             </button>
             <span className="row-meta">
               {row.topic && (
-                <button className="link small practice" onClick={() => onPractice(row.id)}
+                <button className="link small practice meta-practice" onClick={() => onPractice(row.id)}
                         aria-label={`Practice this topic: ${row.name}`}>
                   practice
                 </button>
               )}
-              {row.topic ? (
-                <span className="muted" title={`${row.topic.quizzed} of ${row.topic.total} quizzed`}>
-                  {percent(row.topic.mastery)} · {row.topic.quizzed}/{row.topic.total}
-                </span>
-              ) : (
-                <MasteryBar value={row.mastery} />
-              )}
-              <span className="importance" title="Importance">★{row.importance}</span>
-              <IssueBadge count={row.open_issues} />
+              <span className="meta-mastery">
+                {row.topic ? (
+                  <span className="muted" title={`${row.topic.quizzed} of ${row.topic.total} quizzed`}>
+                    {percent(row.topic.mastery)} · {row.topic.quizzed}/{row.topic.total}
+                  </span>
+                ) : (
+                  <MasteryBar value={row.mastery} />
+                )}
+              </span>
+              <span className="meta-importance importance" title="Importance">★{row.importance}</span>
+              <span className="meta-issues"><IssueBadge count={row.open_issues} /></span>
             </span>
           </div>
           {isTopic && open.has(row.id) && <ul className="tree">{render(row.id, depth + 1)}</ul>}

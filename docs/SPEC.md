@@ -257,7 +257,7 @@ question types and mixed sessions, Postgres, webhooks.
 
 2026-11-26 · Version 2.2 turns review results into a list of issues that open and close, gives
 knowledge points a hierarchy, makes the knowledge base the first page of the web app, adds
-quizzes on chosen points or topics, and can post issues to Notion as comments. The earlier 2.2
+quizzes on chosen points or topics. The earlier 2.2
 items (bookmarks, manual questions, guided setup) move to Version 2.4; quiz by knowledge point
 stays here as milestone 5.
 
@@ -444,48 +444,19 @@ Draft reading, to be confirmed when this milestone is planned (see the open ques
 Done when: a quiz on one topic only asks about points under it; a quiz on two chosen points only
 asks about those two; mastery updates as in a normal quiz.
 
-### 6. Issues as Notion comments (optional, off by default)
+### 6. Issues as Notion comments (removed)
 
-- `config.toml` `[notion_comments] enabled = false`. When on, the Notion integration needs "Read
-  comments" and "Insert comments". This is another exception to "Learnova only reads Notion": it
-  adds and deletes its own comments and never edits note text.
-- After `review`, each new open issue gets one comment: on its block when it has one, otherwise
-  on the page. Text: `Learnova · <kind>: <problem> (<short id>)`. The issue stores the comment
-  ID, discussion ID and the block's text hash at that time. The public API cannot anchor a
-  comment to selected text or resolve a discussion.
-- **Reconcile** on every `sync`, for notes with commented issues (the API lists only open
-  comments):
-
-  | Comment | Block text | Result |
-  |---|---|---|
-  | still open | unchanged | nothing; no new comment |
-  | still open | changed | next `review` decides; if fixed, close the issue and delete the comment |
-  | gone (resolved or deleted) | changed | next `review` decides: `fixed`, otherwise `dismissed` |
-  | gone | unchanged | `dismissed`, closed by `notion`; never raised again |
-
-- Your replies in the discussion are saved on the issue and given to the model at the next
-  review as context; they do not change the status by themselves.
-- Turning the option off stops new comments. `learnova issues clear-comments` deletes all of
-  Learnova's own comments. Requests are rate-limited.
-
-Done when: a review with the option on posts one comment per new issue and none on a second run;
-resolving a comment in Notion without editing makes the issue `dismissed` after `sync`; fixing
-the text and reviewing deletes the comment and marks the issue `fixed`; with the option off
-nothing is written to Notion.
+2026-11-26 · Dropped: no longer needed. Learnova still only reads Notion (apart from
+`web import`); issues stay in Learnova, with "Open in Notion" links to their paragraphs.
 
 Open questions for Version 2.2:
 
 1. Topic questions: should `quiz` ever ask a broader question about a topic itself, or only about
-   its points? (Draft: only its points.)
+   its points? (Decided in milestones 3 and 5: only its points.)
 2. `kp organize` on many points: above a few hundred, send points in batches per workspace or per
    top-level topic?
-3. Layout example (milestone 4): where do Quiz and Issues live: toolbar buttons, or more sidebar
-   tabs next to KP / WorkSpace / Report?
-4. Does the WorkSpace tab show every workspace's page tree together (as in the example) or one
-   workspace at a time? What does clicking a page open: the note's issues and points, or Notion?
-5. "Customize sidebar": which choices (reorder or hide tabs, hide workspaces, pin pages)?
-6. "User Profile": version 1 has one local user and no accounts. Show the local user and a link
-   to settings (models, keys status), or leave it as a placeholder until multi-user?
+3–6. Layout questions: settled in milestone 4 (see the Navigation paragraph there and
+   docs/decisions.md). "Customize sidebar" was not built.
 
 ## Version 2.3
 
@@ -529,9 +500,50 @@ second `web import` is refused; `web check` with no changes writes nothing anywh
 check times; a changed article shows up once in a report with its diff, and the cache is updated;
 new and removed articles are listed once; Notion is never written by `web check`.
 
-## Version 2.4 (not started)
+## Version 2.4 (next)
 
-2026-11-26 · Moved here from the earlier Version 2.2. Planned after Version 2.2.
+2026-11-26 · Version 2.2 is finished (milestones 1–5; milestone 6 was dropped). The earlier 2.4
+items (bookmarks, questions by hand, guided setup) moved to Version 3. Each item below is its own
+milestone, with a plan approved before it is built.
+
+Done already:
+
+- **Web app polish (done 2026-11-26).**
+  - The Knowledge stat strip follows the selected point: a topic counts every point under it
+    (shortcuts included, each once) for points, mastery, open issues and last quiz; a single
+    point shows its own figures. "Show all" restores the totals. This is worked out in the web
+    app from the existing tree endpoint, so the API is unchanged.
+  - Alignment pass over every page: fixed-width columns for mastery, importance and open
+    issues in the trees; a grid for the detail panel's "Move to…" / "Add shortcut…" controls;
+    fixed score/date/question columns for quiz answers; a right-hand action area on issues;
+    one control height for inputs, selects and buttons; aligned sidebar icons and filled-in
+    table headers.
+  - A top-bar theme button switches System / Light / Dark and keeps the choice in the browser
+    (`localStorage`). System follows the computer and updates live; the resolved theme is
+    written to `<html data-theme>`, which now drives the two CSS palettes (the
+    `prefers-color-scheme` media query is gone).
+  Verified with `npm test` (20 tests), `npm run typecheck` and `npm run build`.
+
+1. **Management, and adding a workspace in the web app (done 2026-11-26).** The sidebar entry
+   and page "Sync & review" are renamed **Management** (`/management`; `/sync` redirects). Next
+   to Sync and Review, an **Add new workspace** button opens a form: the Notion page link with a
+   Check button (`POST /api/notion/check` returns the title, or says how to share the page with
+   the integration), a name (filled in from the title), a folder (no default; `~` allowed;
+   created if missing) and "Make it the default workspace". Creating it (`POST /api/workspaces`)
+   also writes an empty `.learnovaignore` (comments only, nothing left out), as
+   `learnova workspace new` does. There is no remove button.
+2. **Sync and review per workspace on the Management page.** The page-wide toolbar ("Sync from
+   Notion", "re-download all", "Run review", "all notes") and its workspace picker go away.
+   Each row of the workspace table gets its own Sync and Review buttons, with the result shown
+   under that workspace. "Re-download all" and "Review all notes" are only needed now and then
+   (after upgrading Learnova, after changing the model or prompts, or when a cached note looks
+   wrong), so they move to a small "More" menu on each row instead of being removed.
+   "Add new workspace" moves to the table's header.
+
+## Version 3 (not started)
+
+2026-11-26 · Moved here from Version 2.4. Guided workspace setup builds on the "Add workspace"
+workflow of Version 2.4.
 
 1. **Bookmark questions.** Save questions to come back to; bookmarked questions show in the
    knowledge point's detail panel.

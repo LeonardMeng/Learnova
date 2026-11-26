@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router";
 import { api } from "./api/client";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { Tabs } from "./layout/Tabs";
 import { AllIssuesPage, IssuesPage } from "./pages/IssuesPage";
 import { AllPointsPage } from "./pages/AllPointsPage";
@@ -9,7 +10,7 @@ import { HistoryPage } from "./pages/HistoryPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { NotesPage } from "./pages/NotesPage";
 import { QuizPage } from "./pages/QuizPage";
-import { SyncPage } from "./pages/SyncPage";
+import { ManagementPage } from "./pages/ManagementPage";
 import { WebImportsPage } from "./pages/WebImportsPage";
 
 /** The title of the page at a path (sidebar entries and tabs). */
@@ -20,7 +21,7 @@ export function titleFor(pathname: string): string {
     "/quiz": "Quiz",
     "/history": "History",
     "/issues": "Issues",
-    "/sync": "Sync & review",
+    "/management": "Management",
     "/web-imports": "Web imports",
     "/reports": "All issues",
   };
@@ -96,10 +97,10 @@ function Sidebar() {
           <Item to="/quiz">Quiz</Item>
           <Item to="/history">History</Item>
           <Item to="/issues">Issues</Item>
-          <Item to="/sync">Sync &amp; review</Item>
+          <Item to="/management">Management</Item>
           {workspaces.data?.map((w) => (
             <Item key={w.name} to={`/workspaces/${encodeURIComponent(w.name)}`}>
-              📁 {w.name}
+              <span className="nav-icon" aria-hidden="true">📁</span> {w.name}
             </Item>
           ))}
           <Item to="/web-imports">Web imports</Item>
@@ -132,6 +133,7 @@ export function App() {
       <div className="main-column">
         <header className="topbar">
           <span className="spacer" />
+          <ThemeToggle />
           <UserName />
         </header>
         <Tabs titleFor={titleFor} />
@@ -142,7 +144,8 @@ export function App() {
             <Route path="/quiz" element={<QuizPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/issues" element={<IssuesPage />} />
-            <Route path="/sync" element={<SyncPage />} />
+            <Route path="/management" element={<ManagementPage />} />
+            <Route path="/sync" element={<Navigate to="/management" replace />} />
             <Route path="/workspaces/:name" element={<NotesPage />} />
             <Route path="/web-imports" element={<WebImportsPage />} />
             <Route path="/reports" element={<AllIssuesPage />} />

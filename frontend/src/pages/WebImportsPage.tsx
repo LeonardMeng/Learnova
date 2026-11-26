@@ -17,7 +17,7 @@ export function WebImportsPage() {
         {imports.data && imports.data.length > 0 && (
           <table>
             <thead>
-              <tr><th>Site</th><th>Articles</th><th>Imported</th><th>Last check</th><th /></tr>
+              <tr><th>Site</th><th>Articles</th><th>Imported</th><th>Last check</th><th>Notion</th></tr>
             </thead>
             <tbody>
               {imports.data.map((w) => (

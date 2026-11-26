@@ -92,38 +92,38 @@ function Detail({ point, onSelect, onClose }: { point: PointDetail; onSelect: (i
         </dd>
       </dl>
 
-      <div className="actions">
-        <label className="field inline">
-          Move to…
+      <div className="control-rows">
+        <div className="control-row">
+          <span className="control-label">Move to…</span>
           <select aria-label="Move to" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
             <option value="">choose…</option>
             <option value="__top">Top level</option>
             {others.map((p) => <option key={p.id} value={p.id}>{p.path.join(" › ")}</option>)}
           </select>
-        </label>
-        <button
-          className="secondary"
-          disabled={!moveTo || update.isPending}
-          onClick={() => update.mutate({ parent_id: moveTo === "__top" ? null : moveTo }, { onSuccess: () => setMoveTo("") })}
-        >
-          Move
-        </button>
-        <label className="field inline">
-          Add shortcut…
+          <button
+            className="secondary"
+            disabled={!moveTo || update.isPending}
+            onClick={() => update.mutate({ parent_id: moveTo === "__top" ? null : moveTo }, { onSuccess: () => setMoveTo("") })}
+          >
+            Move
+          </button>
+        </div>
+        <div className="control-row">
+          <span className="control-label">Add shortcut…</span>
           <select aria-label="Add shortcut" value={shortcut} onChange={(e) => setShortcut(e.target.value)}>
             <option value="">choose…</option>
             {others.filter((p) => !shortcutIds.includes(p.id) && p.id !== point.parent_id).map((p) => (
               <option key={p.id} value={p.id}>{p.path.join(" › ")}</option>
             ))}
           </select>
-        </label>
-        <button
-          className="secondary"
-          disabled={!shortcut || update.isPending}
-          onClick={() => update.mutate({ shortcuts: [...shortcutIds, shortcut] }, { onSuccess: () => setShortcut("") })}
-        >
-          Add
-        </button>
+          <button
+            className="secondary"
+            disabled={!shortcut || update.isPending}
+            onClick={() => update.mutate({ shortcuts: [...shortcutIds, shortcut] }, { onSuccess: () => setShortcut("") })}
+          >
+            Add
+          </button>
+        </div>
       </div>
       {update.isError && <ErrorBox error={update.error} />}
 

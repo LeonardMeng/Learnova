@@ -32,7 +32,7 @@ export function Tabs({ titleFor }: { titleFor: (path: string) => string }) {
   const to = location.pathname + location.search;
 
   useEffect(() => {
-    if (current === "/status") return; // redirects to Overview
+    if (current === "/status" || current === "/sync") return; // old addresses that redirect
     setTabs((prev) => {
       const i = prev.findIndex((t) => t.path === current);
       const next = i < 0 ? [...prev, { path: current, to }] : prev.map((t, j) => (j === i ? { ...t, to } : t));

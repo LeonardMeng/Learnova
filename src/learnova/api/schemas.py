@@ -36,6 +36,16 @@ class CreatedWorkspaceOut(WorkspaceOut):
     notion_title: str
 
 
+class NotionCheckIn(BaseModel):
+    notion_page: str = Field(description="Notion page ID or URL")
+
+
+class NotionCheckOut(BaseModel):
+    page_id: str
+    title: str
+    suggested_name: str  # from the title: lower case, words joined by "-"
+
+
 class RemovedWorkspaceOut(BaseModel):
     removed: str
     was_default: bool

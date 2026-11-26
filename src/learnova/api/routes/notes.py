@@ -1,8 +1,9 @@
-"""A workspace's notes (its Notion page tree), one note with its points and issues, the web
-imports, and who the local user is."""
+"""A workspace's notes (its Notion page tree), one note with its points and issues, checking a
+Notion page before adding a workspace, the web imports, and who the local user is."""
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Annotated
 
@@ -17,6 +18,7 @@ from learnova.config import Settings
 from learnova.errors import NotFoundError
 from learnova.models import IssueStatus, Note, WebArticleState
 from learnova.services import issues as issues_service
+from learnova.sources import notion
 from learnova.storage.database import Repositories
 
 router = APIRouter(prefix="/api", tags=["notes"])
@@ -80,6 +82,16 @@ def get_note(name: str, note_id: uuid.UUID, repos: Repos, settings: Config):
         knowledge_points=points,
         issues=issues,
     )
+
+
+@router.post("/notion/check", response_model=schemas.NotionCheckOut, tags=["workspaces"])
+def check_notion_page(body: schemas.NotionCheckIn):
+    """Whether Learnova can see a Notion page, before creating a workspace for it. If it can't,
+    the error says how to share the page with the integration."""
+    page_id = notion.parse_page_id(body.notion_page)
+    title = notion.page_title(notion.make_client(), page_id)
+    words = re.findall(r"\w+", title.lower())
+    return schemas.NotionCheckOut(page_id=page_id, title=title, suggested_name="-".join(words))
 
 
 @router.get("/web-imports", response_model=list[schemas.WebImportOut], tags=["web imports"])
