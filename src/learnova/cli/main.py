@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from learnova.cli import kp, workspace
+from learnova.cli import kp, web, workspace
 from learnova.cli.common import repositories, short_path, user_errors
 from learnova.config import load_settings
 from learnova.llm import factory
@@ -31,6 +31,7 @@ app = typer.Typer(
 )
 app.add_typer(workspace.app, name="workspace")
 app.add_typer(kp.app, name="kp")
+app.add_typer(web.app, name="web")
 
 
 @app.command()

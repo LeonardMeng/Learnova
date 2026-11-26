@@ -19,6 +19,7 @@ from learnova.storage.repositories import (
     KnowledgeRepository,
     NoteRepository,
     UserRepository,
+    WebImportRepository,
     WorkspaceRepository,
 )
 from learnova.storage.sqlalchemy_repos import (
@@ -28,6 +29,7 @@ from learnova.storage.sqlalchemy_repos import (
     SqlKnowledgeRepository,
     SqlNoteRepository,
     SqlUserRepository,
+    SqlWebImportRepository,
     SqlWorkspaceRepository,
 )
 
@@ -43,6 +45,7 @@ class Repositories:
     knowledge: KnowledgeRepository
     attempts: AttemptRepository
     issued: IssuedQuestionRepository
+    web_imports: WebImportRepository
 
 
 def make_engine(url: str) -> Engine:
@@ -90,4 +93,5 @@ def open_repositories(url: str) -> Repositories:
         knowledge=SqlKnowledgeRepository(sessions),
         attempts=SqlAttemptRepository(sessions),
         issued=SqlIssuedQuestionRepository(sessions),
+        web_imports=SqlWebImportRepository(sessions),
     )

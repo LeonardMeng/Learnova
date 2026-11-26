@@ -32,7 +32,21 @@ Version 2 (see "Version 2" in docs/SPEC.md):
 - [x] V2.1: Multiple choice and true/false
 - [x] V2.2: HTTP API (FastAPI)
 - [x] V2.3: Web frontend
-- [ ] V2.4: check-latest: deferred beyond version 2
+- [ ] check-latest: deferred beyond version 2
 
 Version 2.1:
 - [x] .learnovaignore
+
+Version 2.2 (see "Version 2.2" in docs/SPEC.md):
+- [ ] Milestone 1: Issues in the database, and a new report
+- [ ] Milestone 2: Block anchors
+- [ ] Milestone 3: Knowledge hierarchy
+- [ ] Milestone 4: Knowledge base as the first page; Issues page
+- [ ] Milestone 5: Quiz on chosen points or a topic
+- [ ] Milestone 6: Issues as Notion comments (optional, off by default)
+
+Version 2.3:
+- [x] `web import` (one-time, into Notion) and `web check` (diff report against the local cache)
+
+Version 2.4 (not started; after Version 2.2):
+- [ ] Bookmark questions, add questions by hand, guided workspace setup

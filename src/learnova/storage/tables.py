@@ -196,3 +196,40 @@ class IssuedQuestionRow(Base):
     attempt_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("attempts.id", ondelete="SET NULL")
     )
+
+
+class WebImportRow(Base):
+    __tablename__ = "web_imports"
+    __table_args__ = (UniqueConstraint("user_id", "index_url"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    index_url: Mapped[str] = mapped_column(String(1024))
+    target_page_id: Mapped[str] = mapped_column(String(64))
+    slug: Mapped[str] = mapped_column(String(200))
+    cursor: Mapped[int] = mapped_column(default=0, server_default="0")  # layout steps written
+    layout_hash: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class WebArticleRow(Base):
+    __tablename__ = "web_articles"
+    __table_args__ = (UniqueConstraint("import_id", "url"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    import_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("web_imports.id", ondelete="CASCADE"), index=True
+    )
+    url: Mapped[str] = mapped_column(String(1024))
+    section: Mapped[list[str]] = mapped_column(JSON)
+    title: Mapped[str] = mapped_column(String(500))
+    state: Mapped[str] = mapped_column(String(16))
+    notion_page_id: Mapped[str | None] = mapped_column(String(64))
+    source_modified: Mapped[str | None] = mapped_column(String(64))
+    etag: Mapped[str | None] = mapped_column(String(200))
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+    cache_path: Mapped[str | None] = mapped_column(String(1024))
+    first_seen_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    imported_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)

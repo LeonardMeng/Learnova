@@ -28,12 +28,19 @@ class ApiSettings:
 
 
 @dataclass(frozen=True)
+class ImportWebSettings:
+    # Seconds between two requests to the website, so an import never hammers it.
+    min_interval_seconds: float = 2.0
+
+
+@dataclass(frozen=True)
 class Settings:
     database_url: str
     models: ModelSettings = field(default_factory=ModelSettings)
     weights: WeightConfig = field(default_factory=WeightConfig)
     mastery: MasteryConfig = field(default_factory=MasteryConfig)
     api: ApiSettings = field(default_factory=ApiSettings)
+    import_web: ImportWebSettings = field(default_factory=ImportWebSettings)
 
 
 def load_settings() -> Settings:
@@ -62,5 +69,12 @@ def load_settings() -> Settings:
         ),
         api=ApiSettings(
             allowed_origins=tuple(data.get("api", {}).get("allowed_origins", DEFAULT_ORIGINS))
+        ),
+        import_web=ImportWebSettings(
+            min_interval_seconds=float(
+                data.get("import_web", {}).get(
+                    "min_interval_seconds", ImportWebSettings.min_interval_seconds
+                )
+            )
         ),
     )

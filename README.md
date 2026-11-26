@@ -270,9 +270,18 @@ npm ci
 npm run build          # writes frontend/dist, which `learnova serve` serves
 ```
 
-Then `learnova serve` and open http://127.0.0.1:8000. To work on the frontend itself, run
-`learnova serve` and `npm run dev` together and open http://localhost:5173 (it forwards `/api`
-to the server). After changing the API, run `npm run gen:api` to regenerate the TypeScript
+Then `learnova serve` and open http://127.0.0.1:8000.
+
+Or start everything with one script from the project folder (it installs the web app's packages
+on first run and reads `.env`; Ctrl+C stops it all):
+
+```bash
+scripts/dev.sh           # API + web app with live reload: open http://localhost:5173
+scripts/dev.sh --built   # build the web app, then serve it all on http://127.0.0.1:8000
+```
+
+The first form is for working on the frontend: edits to `frontend/src` show up in the browser
+straight away, and `/api` is forwarded to the API on port 8000. After changing the API, run `npm run gen:api` to regenerate the TypeScript
 types; a Python test fails until you do. Frontend tests: `npm test`; type check:
 `npm run typecheck`.
 

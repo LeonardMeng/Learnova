@@ -11,7 +11,7 @@ Version 1 is a Python command-line tool called Learnova: an AI teaching assistan
 - **Source**: an adapter that reads notes. Notion is the first one. A local folder or other note apps can be added later without changing the rest of the code.
 - **Knowledge point**: the smallest testable unit, extracted from notes by the AI and owned by the user. One knowledge point can come from several notes across several workspaces. Deleting a workspace does not lose what you have mastered.
 - **Data layer abstraction**: upper layers read and write data only through repository interfaces. SQLite now; switching to Postgres later is mostly a config change.
-- **Human-driven**: Learnova only reads Notion and never writes back. Every action is triggered by you from the command line.
+- **Human-driven**: Learnova only reads Notion and never writes back (one exception since V2.3: the one-time `web import`, which writes only under its own target page). Every action is triggered by you from the command line.
 
 ## Scope (version 1)
 
@@ -252,3 +252,218 @@ question types and mixed sessions, Postgres, webhooks.
    them are not read from Notion. Pages that were already synced are kept in the database but
    hidden from review, quiz and status; removing the line restores them, links to knowledge
    points included. `workspace new` writes a commented template.
+
+## Version 2.2
+
+2026-11-26 · Version 2.2 turns review results into a list of issues that open and close, gives
+knowledge points a hierarchy, makes the knowledge base the first page of the web app, adds
+quizzes on chosen points or topics, and can post issues to Notion as comments. The earlier 2.2
+items (bookmarks, manual questions, guided setup) move to Version 2.4; quiz by knowledge point
+stays here as milestone 5.
+
+Each milestone below is its own step, with a plan approved before it is built.
+
+### 1. Issues in the database, and a new report
+
+Today issues exist only inside each report file, so the same issue comes back on every run and
+there is no way to see whether it was fixed.
+
+- **Table `review_issues`** (migration 0012): user, workspace, note, kind
+  (`factual_error` / `unclear` / `missing`), quote (empty for `missing`), problem (for `missing`:
+  topic and why), linked knowledge point (nullable), status (`open` / `fixed` / `dismissed` /
+  `obsolete`), fingerprint, first seen, last seen, closed time, closed by (`review` / `user` /
+  `notion`).
+- **Lifecycle.** When a note is reviewed again, its open and dismissed issues are given to the
+  model, each with a label. For every open issue the model returns `still_present` or `fixed`;
+  fixed ones are closed. New issues must not repeat an open or dismissed one. As a safety net the
+  code also drops a new issue whose fingerprint (kind + normalized quote, or kind + normalized
+  topic for `missing`) matches an open or dismissed issue in the same note. Issues of a deleted
+  note become `obsolete`; issues of an ignored note are hidden like the rest of its data.
+- **Link to knowledge points.** Each issue in the review output names the label of the knowledge
+  point it is about (existing or new), or none.
+- **Priority** (`scheduler/priority.py`, a pure function like `weights.py`):
+  `priority = kind_weight × importance × (1 + (1 − mastery))`. Unlinked issues use importance 3;
+  a point never quizzed counts as mastery 0.5. Defaults in `config.toml` `[issues]`:
+  `factual_error = 3`, `unclear = 2`, `missing = 1`.
+- **CLI.** `learnova issues [--workspace] [--kind] [--status]` lists issues by priority (open by
+  default). `learnova issues fix|dismiss|reopen <id>` changes status by hand; ids are short ids,
+  as with `kp`.
+- **Report.** Still written to `reports/<date>-review.md` after each `review`, now rendered from
+  the database:
+  1. A summary line: new, fixed this run, still open; knowledge points new / updated / removed.
+  2. "Fix first": the top 5 open issues by priority, with importance and mastery shown.
+  3. "Fixed this run".
+  4. "Other open issues", grouped by note.
+  5. "Possible duplicates" with the `kp merge` command, as today.
+  The per-note knowledge-point table is removed (the knowledge base page shows points). Old
+  report files are left as they are.
+
+Done when: a second `review` of an unchanged note adds no issues; editing a note to fix an issue
+and reviewing it closes that issue and lists it under "Fixed this run"; a dismissed issue is not
+raised again; `issues` lists open issues in priority order; `priority.py` has unit tests.
+
+### 2. Block anchors
+
+- `sync` records the blocks of each note in a new table `note_blocks` (migration 0013): note,
+  Notion block ID, position, plain text, text hash.
+- When an issue is created, its quote is matched to a block (normalized substring first, then the
+  closest block above a similarity threshold); no match leaves the block empty.
+- Reports and the web app link each issue to its block
+  (`https://www.notion.so/<page-id>#<block-id>`, IDs without dashes), or to the page when there
+  is no block.
+
+Done when: clicking an issue link opens Notion at the quoted paragraph for the usual block types
+(paragraph, list item, heading, quote, callout, toggle); an unmatched quote links to the page.
+
+### 3. Knowledge hierarchy
+
+- **Table `kp_parents`** (migration 0014): child, parent, is_primary. Every point has at most one
+  primary parent (where it "lives"; points without one are at the top level) and at most 2
+  secondary parents ("shortcuts"). No cycles; depth at most 4. The code enforces all of this.
+- **Topics.** A point with children is a topic. A topic's mastery is not stored: it is the
+  importance-weighted average of the quizzed points in its subtree (shortcuts included), shown
+  with "n of m quizzed". Topics are not drawn by `quiz` in this version.
+- **During `review`.** For each new point the model may pick a primary parent from the user's
+  existing topics and the note's other points ("X is a kind of Y"). It does not create topics or
+  shortcuts here.
+- **`learnova kp organize [--workspace]`.** Sends every point (name, summary, current parents) to
+  the model, which proposes new topics, primary-parent moves, and shortcuts to add or remove
+  ("X is used in / part of Y"). The proposal is written to `reports/<date>-organize.md` and
+  printed; you confirm before anything changes (`--yes` skips the prompt, `--dry-run` only
+  writes the proposal).
+- **By hand.** `learnova kp move <point> --under <parent>` (or `--top`),
+  `learnova kp link <point> --also-under <parent>`, `learnova kp unlink <point> --from <parent>`.
+- **Merge.** `kp merge` moves the merged point's children to the target and keeps the target's
+  primary parent; shortcuts are combined, up to the limit.
+
+Done when: `kp organize` on the existing points produces a readable proposal and applies it
+only after confirmation; moves that would make a cycle, exceed depth 4 or add a third shortcut
+are refused with a clear message; topic mastery matches a hand calculation in tests; merging a
+topic keeps its children.
+
+### 4. Knowledge base as the first page; Issues page
+
+- **API.** `GET /points/tree?workspace=` (every point with primary parent, shortcuts, mastery,
+  topic mastery, open-issue count); `GET /points/{id}` (summary, all paths, source notes with
+  Notion links, last 20 attempts, issues); `PATCH /points/{id}` extended with primary parent and
+  shortcuts; `GET /issues?workspace=&status=&kind=`; `PATCH /issues/{id}` (status).
+- **Navigation.** Knowledge · Quiz · Issues. `/` opens Knowledge. Status is merged into Knowledge:
+  its summary numbers become the stat strip, "weakest" becomes sorting by mastery, and `/status`
+  redirects to Knowledge.
+- **Knowledge page.**
+  - Stat strip: points, average mastery, open issues, last quiz.
+  - Search box: filters the tree as you type, keeping matches and their parent path; each result
+    shows its primary path and "also in: …".
+  - Tree view (default): folders expand and collapse; shortcuts show a link icon and jump to the
+    primary location; each row has mastery, importance and an open-issue badge. A flat view
+    sorts by mastery, importance, last quiz or issue count.
+  - Detail panel: summary, every location, source notes, attempts with a score trend, open
+    issues, importance editing, and "Move to…" / "Add shortcut…".
+- **Issues page** (replaces Reports). Open issues by priority with filters (workspace, kind,
+  status), a Notion link and Fix / Dismiss / Reopen buttons; below that, past reports and the
+  Sync and Review buttons.
+
+Done when: the app opens on Knowledge; a point can be found by search and opened from a
+shortcut; importance and parents can be changed from the detail panel; an issue can be dismissed
+from the Issues page and stays dismissed after a new review; `npm test`, `npm run typecheck` and
+`npm run build` pass.
+
+### 5. Quiz on chosen points or a topic
+
+- `learnova quiz --point <ref> [--point <ref> …]` or `--topic <ref>`. A topic expands to every
+  point in its subtree, shortcuts included. Points are drawn by the usual weights, but only from
+  the selection.
+- API: starting a quiz accepts point IDs. Web: checkboxes in the Knowledge tree with "Practice
+  selected", and "Practice this topic" on topic rows; the Quiz page shows the current scope.
+
+Done when: a quiz on one topic only asks about points under it; a quiz on two chosen points only
+asks about those two; mastery updates as in a normal quiz.
+
+### 6. Issues as Notion comments (optional, off by default)
+
+- `config.toml` `[notion_comments] enabled = false`. When on, the Notion integration needs "Read
+  comments" and "Insert comments". This is another exception to "Learnova only reads Notion": it
+  adds and deletes its own comments and never edits note text.
+- After `review`, each new open issue gets one comment: on its block when it has one, otherwise
+  on the page. Text: `Learnova · <kind>: <problem> (<short id>)`. The issue stores the comment
+  ID, discussion ID and the block's text hash at that time. The public API cannot anchor a
+  comment to selected text or resolve a discussion.
+- **Reconcile** on every `sync`, for notes with commented issues (the API lists only open
+  comments):
+
+  | Comment | Block text | Result |
+  |---|---|---|
+  | still open | unchanged | nothing; no new comment |
+  | still open | changed | next `review` decides; if fixed, close the issue and delete the comment |
+  | gone (resolved or deleted) | changed | next `review` decides: `fixed`, otherwise `dismissed` |
+  | gone | unchanged | `dismissed`, closed by `notion`; never raised again |
+
+- Your replies in the discussion are saved on the issue and given to the model at the next
+  review as context; they do not change the status by themselves.
+- Turning the option off stops new comments. `learnova issues clear-comments` deletes all of
+  Learnova's own comments. Requests are rate-limited.
+
+Done when: a review with the option on posts one comment per new issue and none on a second run;
+resolving a comment in Notion without editing makes the issue `dismissed` after `sync`; fixing
+the text and reviewing deletes the comment and marks the issue `fixed`; with the option off
+nothing is written to Notion.
+
+Open questions for Version 2.2:
+
+1. Topic questions: should `quiz` ever ask a broader question about a topic itself, or only about
+   its points? (Draft: only its points.)
+2. `kp organize` on many points: above a few hundred, send points in batches per workspace or per
+   top-level topic?
+
+## Version 2.3
+
+2026-11-26 · Version 2.3 adds `learnova web`: a web tutorial is imported into Notion **once**, and
+later changes on the site are compared with a local cache and reported, never written to Notion.
+The first source is the GeeksforGeeks AI tutorial
+(`https://www.geeksforgeeks.org/artificial-intelligence/artificial-intelligence/`).
+
+`web import` is the one exception to "Learnova only reads Notion": it writes only under the page
+named with `--into`, and only until the import is complete.
+
+1. **`learnova web import <index-url> --into <notion-page> [--limit N]`.** The `--into` page is
+   laid out like the index page: its introduction, h2/h3 headings and section descriptions, with
+   each listed article as a Notion sub-page in the place of its link. An article page is titled
+   with the article's own title and holds a source link, then the original text; no template or
+   extra blocks: you write your notes on it. Links inside articles are not followed. The same text
+   is saved as Markdown in `<user home>/web/<slug>/cache/`. Notion adds a sub-page at the end of
+   its parent, so the layout is written strictly in order and the run stops at the first error;
+   running it again continues from that step (also after `--limit`), and nothing is written
+   twice. If the index changes while an import is unfinished, it is refused (start over). Once
+   everything is in, the import is complete and `web import` refuses it. Requests to the site are
+   rate-limited (`config.toml` `[import_web] min_interval_seconds`, default 2). The Notion
+   integration needs "Insert content" on the target page, and "Update content" to redo a page
+   whose import was cut off. `learnova web forget <index-url>` drops an import's records and
+   cache (reports are kept) so it can be imported again; the Notion pages are deleted by hand.
+2. **`learnova web check [index-url]`.** Fetches the index and each imported article (with ETag;
+   skipped when `article:modified_time` or the text is unchanged) and compares it with the cache,
+   section by section. Changes go into `<user home>/web/<slug>/reports/<date>-check.md`: for each
+   changed article a link to its Notion page and the original, which sections were added, changed
+   or removed, and the changed lines as a diff; articles new in the index (listed, not imported);
+   articles removed from it (their Notion pages are left alone). You decide what goes into your
+   notes. After the report the cache holds the new version, so each change is reported once. No
+   report is written when nothing changed.
+3. **State.** `web_imports` (index URL, target page, folder slug, layout progress, completed time)
+   and `web_articles` (URL, section, title, state imported/new/removed, Notion page ID, modified
+   time, ETag, hash of the cached Markdown, cache path, times), migrations 0010 and 0011.
+
+Done when: an import lays out the `--into` page like the index with one page per article and
+fills the cache; a
+second `web import` is refused; `web check` with no changes writes nothing anywhere but the
+check times; a changed article shows up once in a report with its diff, and the cache is updated;
+new and removed articles are listed once; Notion is never written by `web check`.
+
+## Version 2.4 (not started)
+
+2026-11-26 · Moved here from the earlier Version 2.2. Planned after Version 2.2.
+
+1. **Bookmark questions.** Save questions to come back to; bookmarked questions show in the
+   knowledge point's detail panel.
+2. **Add questions by hand.** Write your own question for a knowledge point, from its detail
+   panel; it joins that point's question pool.
+3. **Guided workspace setup.** A step-by-step flow: add the Notion link, create
+   `.learnovaignore`, configure the workspace.

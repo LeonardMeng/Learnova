@@ -177,3 +177,49 @@ class IssuedQuestion(BaseModel):
     created_at: datetime
     closed_at: datetime | None
     attempt_id: uuid.UUID | None
+
+
+class WebImport(BaseModel):
+    """A web tutorial imported into Notion once by `learnova web import`. Later changes on the
+    site are only compared with the local cache (`web check`), never written to Notion. The
+    `--into` page is laid out like the index page; `cursor` counts the steps of that layout
+    already written and `layout_hash` identifies the layout they belong to."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    index_url: str
+    target_page_id: str
+    slug: str  # folder name under <user home>/web/
+    cursor: int
+    layout_hash: str | None
+    created_at: datetime
+    completed_at: datetime | None  # when every listed article was in Notion
+
+
+class WebArticleState(StrEnum):
+    IMPORTED = "imported"  # in Notion and in the cache (or being imported)
+    NEW = "new"  # appeared in the index after the import; reported, not imported
+    REMOVED = "removed"  # was imported, then left the index
+
+
+class WebArticle(BaseModel):
+    """One article of a web import."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    import_id: uuid.UUID
+    url: str
+    section: tuple[str, ...]  # headings in the index, top first
+    title: str
+    state: WebArticleState
+    notion_page_id: str | None
+    source_modified: str | None  # article:modified_time of the cached version
+    etag: str | None
+    content_hash: str | None  # of the cached Markdown; None until the import of it finished
+    cache_path: str | None  # relative to the import's folder
+    first_seen_at: datetime
+    imported_at: datetime | None
+    checked_at: datetime | None

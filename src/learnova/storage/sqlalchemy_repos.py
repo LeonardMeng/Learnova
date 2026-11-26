@@ -23,6 +23,9 @@ from learnova.models import (
     PointSource,
     QuestionType,
     User,
+    WebArticle,
+    WebArticleState,
+    WebImport,
     Workspace,
 )
 from learnova.storage.repositories import (
@@ -35,6 +38,7 @@ from learnova.storage.repositories import (
     PointNotFound,
     QuestionAlreadyClosed,
     UserRepository,
+    WebImportRepository,
     WorkspaceNameTaken,
     WorkspaceNotFound,
     WorkspaceRepository,
@@ -48,6 +52,8 @@ from learnova.storage.tables import (
     NoteImageRow,
     NoteRow,
     UserRow,
+    WebArticleRow,
+    WebImportRow,
     WorkspaceRow,
     utcnow,
 )
@@ -623,3 +629,119 @@ class SqlIssuedQuestionRepository(IssuedQuestionRepository):
                 )
             )
             return result.rowcount
+
+
+def _web_import(row: WebImportRow) -> WebImport:
+    return WebImport(
+        id=row.id,
+        user_id=row.user_id,
+        index_url=row.index_url,
+        target_page_id=row.target_page_id,
+        slug=row.slug,
+        cursor=row.cursor,
+        layout_hash=row.layout_hash,
+        created_at=row.created_at,
+        completed_at=row.completed_at,
+    )
+
+
+_ARTICLE_FIELDS = (
+    "title", "notion_page_id", "source_modified", "etag", "content_hash", "cache_path",
+    "first_seen_at", "imported_at", "checked_at",
+)  # fmt: skip
+
+
+def _web_article(row: WebArticleRow) -> WebArticle:
+    return WebArticle(
+        id=row.id,
+        import_id=row.import_id,
+        url=row.url,
+        section=tuple(row.section),
+        state=WebArticleState(row.state),
+        **{f: getattr(row, f) for f in _ARTICLE_FIELDS},
+    )
+
+
+class SqlWebImportRepository(WebImportRepository):
+    def __init__(self, sessions: sessionmaker[Session]):
+        self._sessions = sessions
+
+    def add(self, user_id, index_url, target_page_id, slug) -> WebImport:
+        with self._sessions.begin() as s:
+            row = WebImportRow(
+                user_id=user_id,
+                index_url=index_url,
+                target_page_id=target_page_id,
+                slug=slug,
+                cursor=0,
+            )
+            s.add(row)
+            s.flush()
+            return _web_import(row)
+
+    def get_by_url(self, user_id, index_url) -> WebImport | None:
+        with self._sessions() as s:
+            row = s.scalars(
+                select(WebImportRow).where(
+                    WebImportRow.user_id == user_id, WebImportRow.index_url == index_url
+                )
+            ).first()
+            return _web_import(row) if row else None
+
+    def list(self, user_id) -> list[WebImport]:
+        with self._sessions() as s:
+            rows = s.scalars(
+                select(WebImportRow)
+                .where(WebImportRow.user_id == user_id)
+                .order_by(WebImportRow.created_at)
+            )
+            return [_web_import(r) for r in rows]
+
+    def set_progress(self, import_id, cursor, layout_hash) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(WebImportRow, import_id)
+            if row is not None:
+                row.cursor = cursor
+                row.layout_hash = layout_hash
+
+    def mark_completed(self, import_id, at) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(WebImportRow, import_id)
+            if row is not None:
+                row.completed_at = at
+
+    def delete(self, import_id) -> None:
+        with self._sessions.begin() as s:
+            s.execute(delete(WebArticleRow).where(WebArticleRow.import_id == import_id))
+            s.execute(delete(WebImportRow).where(WebImportRow.id == import_id))
+
+    def articles(self, import_id) -> list[WebArticle]:
+        with self._sessions() as s:
+            rows = s.scalars(select(WebArticleRow).where(WebArticleRow.import_id == import_id))
+            return [_web_article(r) for r in rows]
+
+    def new_article(self, import_id, url, section, title, state, seen_at) -> WebArticle:
+        with self._sessions.begin() as s:
+            row = WebArticleRow(
+                import_id=import_id,
+                url=url,
+                section=list(section),
+                title=title,
+                state=state.value,
+                first_seen_at=seen_at,
+            )
+            s.add(row)
+            s.flush()
+            return _web_article(row)
+
+    def save_article(self, article) -> WebArticle:
+        with self._sessions.begin() as s:
+            row = s.get(WebArticleRow, article.id)
+            if row is None:
+                raise LookupError(f"web article {article.id} not found")
+            row.section = list(article.section)
+            row.state = article.state.value
+            for f in _ARTICLE_FIELDS:
+                setattr(row, f, getattr(article, f))
+            s.flush()
+            return _web_article(row)

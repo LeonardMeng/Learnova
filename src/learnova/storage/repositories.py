@@ -21,6 +21,9 @@ from learnova.models import (
     PointSource,
     QuestionType,
     User,
+    WebArticle,
+    WebArticleState,
+    WebImport,
     Workspace,
 )
 from learnova.scheduler.mastery import MasteryState
@@ -242,3 +245,44 @@ class IssuedQuestionRepository(ABC):
     @abstractmethod
     def purge_open(self, older_than: datetime) -> int:
         """Delete open questions created before `older_than`; returns how many."""
+
+
+class WebImportRepository(ABC):
+    @abstractmethod
+    def add(
+        self, user_id: uuid.UUID, index_url: str, target_page_id: str, slug: str
+    ) -> WebImport: ...
+
+    @abstractmethod
+    def get_by_url(self, user_id: uuid.UUID, index_url: str) -> WebImport | None: ...
+
+    @abstractmethod
+    def list(self, user_id: uuid.UUID) -> list[WebImport]: ...
+
+    @abstractmethod
+    def set_progress(self, import_id: uuid.UUID, cursor: int, layout_hash: str) -> None: ...
+
+    @abstractmethod
+    def mark_completed(self, import_id: uuid.UUID, at: datetime) -> None: ...
+
+    @abstractmethod
+    def delete(self, import_id: uuid.UUID) -> None:
+        """The import and its articles."""
+
+    @abstractmethod
+    def articles(self, import_id: uuid.UUID) -> list[WebArticle]: ...
+
+    @abstractmethod
+    def new_article(
+        self,
+        import_id: uuid.UUID,
+        url: str,
+        section: tuple[str, ...],
+        title: str,
+        state: WebArticleState,
+        seen_at: datetime,
+    ) -> WebArticle: ...
+
+    @abstractmethod
+    def save_article(self, article: WebArticle) -> WebArticle:
+        """Write every field of an existing article (matched by id)."""
