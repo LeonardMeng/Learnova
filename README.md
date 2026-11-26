@@ -154,9 +154,11 @@ learnova sync --workspace interview --full
 
 ### `learnova review [--all] [--workspace NAME]`
 
-Sends each note changed since its last review to the main model, which extracts knowledge points
-and flags factual errors, unclear or incomplete explanations, and missing topics. Writes a report
-to `reports/<date>-review.md`. Points already found in a note are kept, updated or removed, not
+Sends each note changed since its last review to the main model, which extracts knowledge points,
+flags factual errors, unclear or incomplete explanations and missing topics, and checks which of
+the note's open issues are now fixed. Writes a report to `reports/<date>-review.md`: this run's
+summary, the five open issues to fix first, what was fixed, the other open issues by note, and
+possible duplicate points. Points already found in a note are kept, updated or removed, not
 created again; new points that may duplicate an existing one are flagged with a ready-made
 `kp merge` command. Your notes are never changed.
 
@@ -199,6 +201,28 @@ overall and per workspace, then your N weakest points (default 10).
 learnova status
 learnova status -w interview --weakest 20
 ```
+
+### `learnova issues [--workspace NAME] [--kind KIND] [--status STATUS]`
+
+Lists the problems reviews found, most important first:
+`priority = kind weight × importance × (1 + (1 − mastery))`, so a wrong fact about an important
+point you haven't mastered comes first. Kinds: `factual_error`, `unclear`, `missing`. Shows open
+issues unless `--status` is `fixed`, `dismissed`, `obsolete` or `all`. The weights are under
+`[issues]` in `config.toml` (`factual_error = 3`, `unclear = 2`, `missing = 1`).
+
+Issues are kept between reviews: re-reviewing a changed note closes the issues it no longer has
+and doesn't raise the same issue twice. Change one by hand with its id (first 8+ characters):
+
+```bash
+learnova issues
+learnova issues fix 3fa9c1d2       # you fixed it (a later review would also notice)
+learnova issues dismiss 3fa9c1d2   # not a problem: reviews won't raise it again
+learnova issues reopen 3fa9c1d2
+```
+
+Issues of a deleted note become `obsolete`; issues of an ignored note are hidden with it. After
+upgrading to this version, run `learnova review --all` once so issues from earlier reviews are
+recorded (until then they exist only in old report files).
 
 ### `learnova kp list [--workspace NAME]`
 

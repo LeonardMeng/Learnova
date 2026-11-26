@@ -9,6 +9,8 @@ from learnova.llm.factory import LLMCallError
 from learnova.models import NoteContent, NoteSummary
 from learnova.report import render_review, write_review_report
 from learnova.scheduler.mastery import replay
+from learnova.scheduler.priority import IssueWeights
+from learnova.services import issues as issues_service
 from learnova.services import knowledge
 from learnova.services.review import (
     DuplicateCheck,
@@ -257,7 +259,7 @@ def test_duplicates_across_workspaces_then_merge(repos, tmp_path):
     assert outcome.possible_duplicate.sources[0].workspace_name == "ml"
 
     user = repos.users.get_or_create_local()
-    report = render_review(run, "fake:model", repos.knowledge.list_for_user(user.id), T1)
+    report = render_review(run, "fake:model", repos.knowledge.list_for_user(user.id), [], T1)
     assert '`learnova kp merge "GD" --into "Gradient descent"`' in report
     assert "(ml: Interview / Optimisation)" in report
 
@@ -315,15 +317,22 @@ def test_report_file_and_sections(repos, tmp_path):
     run = review_notes(ws, repos, notes_to_review(repos, ws, False), reviewer, Deduper())
     user = repos.users.get_or_create_local()
     points = repos.knowledge.list_for_user(user.id)
-    first = write_review_report(run, "fake:model", points)
-    second = write_review_report(run, "fake:model", points)
+    open_issues = issues_service.ranked(repos, IssueWeights(), ws.id)
+    first = write_review_report(run, "fake:model", points, open_issues)
+    second = write_review_report(run, "fake:model", points, open_issues)
     assert first.parent == ws.path / "reports" and first.name.endswith("-review.md")
     assert second.name.endswith("-review-2.md")
     text = first.read_text()
-    assert "- Factual errors: 1 · unclear explanations: 1 · missing topics: 1" in text
-    assert "### Factual errors\n\n- > Redis is single-threaded for I/O" in text
-    assert "### Missing topics\n\n- **Replication**" in text
-    assert "| new | **RDB**: About RDB. | 5 |" in text
+    assert "- This run: 1 note(s) reviewed · 3 new issue(s) · 0 fixed · 3 open" in text
+    # Fix first, by priority: factual error (3×3×1.5) > unclear (2×3×1.5) > missing (1×3×1.5)
+    fix_first = text.split("## Fix first")[1].split("## Fixed this run")[0]
+    assert fix_first.index("**Factual error**") < fix_first.index("**Unclear**")
+    assert fix_first.index("**Unclear**") < fix_first.index("**Missing topic**")
+    assert "> Redis is single-threaded for I/O" in fix_first
+    assert "**Replication**: A Redis note should cover replicas." in fix_first
+    assert "priority 13.5" in fix_first and " · new · `" in fix_first
+    assert "## Fixed this run\n\nNothing was fixed this run." in text
+    assert "| new | **RDB**" not in text  # the per-note point table is gone
 
 
 def test_find_point_by_ambiguous_name(repos):
@@ -385,7 +394,9 @@ def test_review_and_merge_commands(tmp_path, monkeypatch, learnova_home):
     r = runner.invoke(app, ["review"])
     assert r.exit_code == 0, r.output
     assert "Interview / Database: reviewed" in r.output
-    assert "2 reviewed · 2 new point(s) · 0 issue(s) · 0 missing topic(s) · 1 possible" in r.output
+    assert (
+        "2 reviewed · 2 new point(s) · 0 new issue(s) · 0 fixed · 0 open · 1 possible" in r.output
+    )
     report = next((ws_dir / "reports").iterdir()).read_text()
     assert '`learnova kp merge "Cache" --into "Caching"`' in report
 

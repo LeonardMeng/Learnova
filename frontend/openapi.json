@@ -1379,6 +1379,16 @@
             "title": "Missing Topics",
             "default": 0
           },
+          "fixed": {
+            "type": "integer",
+            "title": "Fixed",
+            "default": 0
+          },
+          "open": {
+            "type": "integer",
+            "title": "Open",
+            "default": 0
+          },
           "possible_duplicates": {
             "type": "integer",
             "title": "Possible Duplicates",

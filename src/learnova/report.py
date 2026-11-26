@@ -9,8 +9,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from learnova.errors import NotFoundError
-from learnova.models import KnowledgePoint, Workspace
-from learnova.services.review import NoteResult, PointOutcome, ReviewRun, Status, where
+from learnova.models import IssueKind, KnowledgePoint, Workspace
+from learnova.services.issues import RankedIssue
+from learnova.services.review import ReviewRun, Status, where
 
 REPORTS_DIR = "reports"
 _SAFE_NAME = re.compile(r"^[\w.-]+\.md$")
@@ -61,7 +62,12 @@ def read_report(workspace: Workspace, name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def write_review_report(run: ReviewRun, model_label: str, all_points: list[KnowledgePoint]) -> Path:
+def write_review_report(
+    run: ReviewRun,
+    model_label: str,
+    all_points: list[KnowledgePoint],
+    open_issues: list[RankedIssue],
+) -> Path:
     folder = run.workspace.path / REPORTS_DIR
     folder.mkdir(exist_ok=True)
     now = datetime.now().astimezone()
@@ -70,13 +76,27 @@ def write_review_report(run: ReviewRun, model_label: str, all_points: list[Knowl
     while path.exists():
         path = folder / f"{now:%Y-%m-%d}-review-{n}.md"
         n += 1
-    path.write_text(render_review(run, model_label, all_points, now), encoding="utf-8")
+    path.write_text(render_review(run, model_label, all_points, open_issues, now), encoding="utf-8")
     return path
 
 
+FIX_FIRST = 5
+KIND_LABEL = {
+    IssueKind.FACTUAL_ERROR: "Factual error",
+    IssueKind.UNCLEAR: "Unclear",
+    IssueKind.MISSING: "Missing topic",
+}
+
+
 def render_review(
-    run: ReviewRun, model_label: str, all_points: list[KnowledgePoint], now: datetime
+    run: ReviewRun,
+    model_label: str,
+    all_points: list[KnowledgePoint],
+    open_issues: list[RankedIssue],
+    now: datetime,
 ) -> str:
+    """The report after a review: this run's changes, then every open issue of the workspace
+    by priority (from the database, so it also shows issues from earlier runs)."""
     names = [p.name.lower() for p in all_points]
 
     def ref(point: KnowledgePoint) -> str:
@@ -85,100 +105,89 @@ def render_review(
 
     outcomes = [o for r in run.reviewed for o in r.outcomes]
     count = lambda status: sum(1 for o in outcomes if o.status == status)  # noqa: E731
-    issues = [i for r in run.reviewed for i in r.issues]
-    errors = sum(1 for i in issues if i.kind == "factual_error")
-    dups = sum(1 for o in outcomes if o.possible_duplicate)
+    new_issues = [i for r in run.reviewed for i in r.new_issues]
+    fixed = [(r.note, i) for r in run.reviewed for i in r.fixed_issues]
+    dups = [o for o in outcomes if o.possible_duplicate]
 
     out = [
         f"# Review: {run.workspace.name}",
         "",
         f"{now:%Y-%m-%d %H:%M} · model {model_label}",
         "",
-        f"- Notes reviewed: {len(run.reviewed)}"
-        + (f" (skipped {len(run.skipped)} without content)" if run.skipped else ""),
-        f"- Factual errors: {errors} · unclear explanations: {len(issues) - errors} · "
-        f"missing topics: {sum(len(r.missing) for r in run.reviewed)}",
+        f"- This run: {len(run.reviewed)} note(s) reviewed"
+        + (f", {len(run.skipped)} skipped without content" if run.skipped else "")
+        + f" · {len(new_issues)} new issue(s) · {len(fixed)} fixed · "
+        f"{len(open_issues)} open in this workspace",
         f"- Knowledge points: {count(Status.NEW)} new, {count(Status.UPDATED)} updated, "
-        f"{count(Status.KEPT)} kept, {count(Status.REMOVED)} removed"
-        + (f" · {dups} possible duplicate(s)" if dups else ""),
+        f"{count(Status.REMOVED)} removed"
+        + (f" · {len(dups)} possible duplicate(s)" if dups else ""),
     ]
+    for result in run.reviewed:
+        out += [f"- ⚠ {' / '.join(result.note.path)}: {w}" for w in result.warnings]
     if run.failed:
         out += ["", "## Not reviewed (will be retried next time)", ""]
         out += [f"- {' / '.join(note.path)}: {error}" for note, error in run.failed]
 
-    for result in run.reviewed:
-        out += ["", *_note_section(result, ref)]
+    new_ids = {i.id for i in new_issues}
+    top, rest = open_issues[:FIX_FIRST], open_issues[FIX_FIRST:]
+    out += ["", "## Fix first", ""]
+    if not top:
+        out.append("No open issues.")
+    for n, ranked_issue in enumerate(top, 1):
+        out += _issue_entry(ranked_issue, new_ids, number=n)
+
+    out += ["", "## Fixed this run", ""]
+    if not fixed:
+        out.append("Nothing was fixed this run.")
+    for note, issue in fixed:
+        out.append(
+            f"- **{KIND_LABEL[issue.kind]}** in {' / '.join(note.path)}: "
+            f"{_one_line(issue.quote or issue.topic)} `{str(issue.id)[:8]}`"
+        )
+
+    if rest:
+        out += ["", "## Other open issues"]
+        by_note: dict[tuple[str, ...], list[RankedIssue]] = {}
+        for ranked_issue in rest:
+            by_note.setdefault(ranked_issue.issue.note_path, []).append(ranked_issue)
+        for path in sorted(by_note):
+            out += ["", f"### {' / '.join(path)}", ""]
+            for ranked_issue in by_note[path]:
+                out += _issue_entry(ranked_issue, new_ids, show_note=False)
+
+    if dups:
+        out += ["", "## Possible duplicates", "", "If they are the same, merge them:", ""]
+        for o in dups:
+            cand = o.possible_duplicate
+            out += [
+                f"- **{o.point.name}** may duplicate **{cand.point.name}** ({where(cand.sources)})",
+                f"  `learnova kp merge {ref(o.point)} --into {ref(cand.point)}`",
+            ]
     return "\n".join(out).rstrip() + "\n"
 
 
-def _note_section(result: NoteResult, ref) -> list[str]:
-    out = [f"## {' / '.join(result.note.path)}"]
-    for warning in result.warnings:
-        out += ["", f"> ⚠ {warning}"]
-
-    errors = [i for i in result.issues if i.kind == "factual_error"]
-    unclear = [i for i in result.issues if i.kind == "unclear"]
-    for title, items in (("Factual errors", errors), ("Unclear or incomplete", unclear)):
-        if items:
-            out += ["", f"### {title}", ""]
-            for i in items:
-                out.append(f"- > {_one_line(i.quote)}\n\n  {i.problem.strip()}")
-    if result.missing:
-        out += ["", "### Missing topics", ""]
-        out += [f"- **{m.topic.strip()}**: {m.why.strip()}" for m in result.missing]
-    if not (result.issues or result.missing):
-        out += ["", "No problems found."]
-
-    shown = [o for o in result.outcomes if o.status != Status.REMOVED]
-    if shown:
-        out += [
-            "",
-            "### Knowledge points",
-            "",
-            "| | Point | Importance | Notes |",
-            "|---|---|---|---|",
-        ]
-        order = [Status.NEW, Status.UPDATED, Status.KEPT]
-        for o in sorted(shown, key=lambda o: (order.index(o.status), -o.point.importance)):
-            out.append(
-                f"| {o.status} | **{_cell(o.point.name)}**: {_cell(o.point.summary)} "
-                f"| {o.point.importance} | {_cell(_notes(o))} |"
-            )
-        dups = [o for o in shown if o.possible_duplicate]
-        if dups:
-            out += ["", "Possible duplicates: if they are the same, merge them:", ""]
-            for o in dups:
-                cand = o.possible_duplicate
-                out += [
-                    f"- **{o.point.name}** may duplicate **{cand.point.name}** "
-                    f"({where(cand.sources)})",
-                    f"  `learnova kp merge {ref(o.point)} --into {ref(cand.point)}`",
-                ]
-    removed = [o for o in result.outcomes if o.status == Status.REMOVED]
-    if removed:
-        out += ["", "### No longer in this note", ""]
-        for o in removed:
-            kept_by = f" (still in {o.other_sources} other note(s))" if o.other_sources else ""
-            out.append(f"- {o.point.name}{kept_by}")
-    return out
-
-
-def _notes(o: PointOutcome) -> str:
-    parts = []
-    if o.status == Status.UPDATED and o.previous and o.previous.name != o.point.name:
-        parts.append(f"was “{o.previous.name}”")
-    if o.other_sources:
-        parts.append(f"also in {o.other_sources} other note(s)")
-    if o.possible_duplicate:
-        parts.append(f"may duplicate “{o.possible_duplicate.point.name}”")
-    if o.note:
-        parts.append(o.note)
-    return "; ".join(parts)
+def _issue_entry(
+    r: RankedIssue, new_ids: set, number: int = 0, show_note: bool = True
+) -> list[str]:
+    issue = r.issue
+    bullet = f"{number}." if number else "-"
+    where_ = f" in {' / '.join(issue.note_path)}" if show_note else ""
+    about = ""
+    if r.point is not None:
+        mastery = f"{r.mastery.mastery:.2f}" if r.mastery else "not quizzed"
+        about = f" · {r.point.name} (importance {r.point.importance}, mastery {mastery})"
+    new = " · new" if issue.id in new_ids else ""
+    head = (
+        f"{bullet} **{KIND_LABEL[issue.kind]}**{where_} · priority {r.priority:.1f}{about}{new}"
+        f" · `{str(issue.id)[:8]}`"
+    )
+    body = (
+        f"   **{_one_line(issue.topic)}**: {issue.problem.strip()}"
+        if issue.kind == IssueKind.MISSING
+        else f"   > {_one_line(issue.quote)}\n\n   {issue.problem.strip()}"
+    )
+    return [head, "", body, ""]
 
 
 def _one_line(text: str) -> str:
     return " ".join(text.split())
-
-
-def _cell(text: str) -> str:
-    return _one_line(text).replace("|", "\\|")

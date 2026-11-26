@@ -143,8 +143,8 @@ function ReviewSummary({ result }: { result: ReviewResult }) {
   }
   return (
     <div className="card notice">
-      <strong>Reviewed {result.reviewed} note(s).</strong> {result.new_points} new point(s), {result.issues} issue(s),{" "}
-      {result.missing_topics} missing topic(s)
+      <strong>Reviewed {result.reviewed} note(s).</strong> {result.new_points} new point(s),{" "}
+      {result.issues + result.missing_topics} new issue(s), {result.fixed} fixed, {result.open} open
       {result.possible_duplicates > 0 && <>, {result.possible_duplicates} possible duplicate(s)</>}.
       {result.failed.length > 0 && <p className="bad">{result.failed.length} note(s) failed and will be retried.</p>}
     </div>

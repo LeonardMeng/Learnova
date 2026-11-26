@@ -16,6 +16,7 @@ from learnova.storage.repositories import (
     AttemptRepository,
     ImageRepository,
     IssuedQuestionRepository,
+    IssueRepository,
     KnowledgeRepository,
     NoteRepository,
     UserRepository,
@@ -26,6 +27,7 @@ from learnova.storage.sqlalchemy_repos import (
     SqlAttemptRepository,
     SqlImageRepository,
     SqlIssuedQuestionRepository,
+    SqlIssueRepository,
     SqlKnowledgeRepository,
     SqlNoteRepository,
     SqlUserRepository,
@@ -45,6 +47,7 @@ class Repositories:
     knowledge: KnowledgeRepository
     attempts: AttemptRepository
     issued: IssuedQuestionRepository
+    issues: IssueRepository
     web_imports: WebImportRepository
 
 
@@ -93,5 +96,6 @@ def open_repositories(url: str) -> Repositories:
         knowledge=SqlKnowledgeRepository(sessions),
         attempts=SqlAttemptRepository(sessions),
         issued=SqlIssuedQuestionRepository(sessions),
+        issues=SqlIssueRepository(sessions),
         web_imports=SqlWebImportRepository(sessions),
     )

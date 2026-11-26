@@ -85,8 +85,10 @@ class ReviewOut(BaseModel):
     skipped: int = 0
     failed: list[FailedNoteOut] = []
     new_points: int = 0
-    issues: int = 0
-    missing_topics: int = 0
+    issues: int = 0  # new factual errors and unclear passages this run
+    missing_topics: int = 0  # new missing topics this run
+    fixed: int = 0  # issues a re-review saw fixed this run
+    open: int = 0  # open issues in the workspace after this run
     possible_duplicates: int = 0
     report: str | None = None  # file name under the workspace's reports/
     model: str | None = None

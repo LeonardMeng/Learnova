@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from learnova.home import ensure_home
 from learnova.scheduler.mastery import DEFAULT_TYPE_WEIGHTS, MasteryConfig
+from learnova.scheduler.priority import IssueWeights
 from learnova.scheduler.weights import WeightConfig
 
 
@@ -40,6 +41,7 @@ class Settings:
     weights: WeightConfig = field(default_factory=WeightConfig)
     mastery: MasteryConfig = field(default_factory=MasteryConfig)
     api: ApiSettings = field(default_factory=ApiSettings)
+    issues: IssueWeights = field(default_factory=IssueWeights)
     import_web: ImportWebSettings = field(default_factory=ImportWebSettings)
 
 
@@ -69,6 +71,13 @@ def load_settings() -> Settings:
         ),
         api=ApiSettings(
             allowed_origins=tuple(data.get("api", {}).get("allowed_origins", DEFAULT_ORIGINS))
+        ),
+        issues=IssueWeights(
+            **{
+                k: float(v)
+                for k, v in data.get("issues", {}).items()
+                if k in ("factual_error", "unclear", "missing")
+            }
         ),
         import_web=ImportWebSettings(
             min_interval_seconds=float(

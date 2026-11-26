@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 
 from learnova.api import schemas
 from learnova.api.app import WorkspaceLocks, get_locks, get_repos, workspace_named
-from learnova.models import Workspace
+from learnova.models import IssueKind, Workspace
 from learnova.report import list_reports, read_report
 from learnova.services import review as review_service
 from learnova.services.workspace_sync import run_sync
@@ -104,8 +104,12 @@ def review(name: str, body: schemas.ReviewIn, repos: Repos, locks: Locks):
         skipped=len(run.skipped),
         failed=[schemas.FailedNoteOut(path=list(n.path), error=e) for n, e in run.failed],
         new_points=sum(1 for o in outcomes if o.status == review_service.Status.NEW),
-        issues=sum(len(r.issues) for r in run.reviewed),
-        missing_topics=sum(len(r.missing) for r in run.reviewed),
+        issues=sum(1 for r in run.reviewed for i in r.new_issues if i.kind != IssueKind.MISSING),
+        missing_topics=sum(
+            1 for r in run.reviewed for i in r.new_issues if i.kind == IssueKind.MISSING
+        ),
+        fixed=sum(len(r.fixed_issues) for r in run.reviewed),
+        open=outcome.open_issues,
         possible_duplicates=sum(1 for o in outcomes if o.possible_duplicate),
         report=outcome.report.name,
         model=outcome.model,

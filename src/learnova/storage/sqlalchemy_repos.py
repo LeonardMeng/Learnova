@@ -15,6 +15,8 @@ from learnova.models import (
     ImageRef,
     IssuedQuestion,
     IssuedStatus,
+    IssueKind,
+    IssueStatus,
     KnowledgePoint,
     Mastery,
     Note,
@@ -22,6 +24,7 @@ from learnova.models import (
     NoteSummary,
     PointSource,
     QuestionType,
+    ReviewIssue,
     User,
     WebArticle,
     WebArticleState,
@@ -32,6 +35,7 @@ from learnova.storage.repositories import (
     AttemptRepository,
     ImageRepository,
     IssuedQuestionRepository,
+    IssueRepository,
     KnowledgeRepository,
     MasteryFn,
     NoteRepository,
@@ -51,6 +55,7 @@ from learnova.storage.tables import (
     MasteryRow,
     NoteImageRow,
     NoteRow,
+    ReviewIssueRow,
     UserRow,
     WebArticleRow,
     WebImportRow,
@@ -247,6 +252,17 @@ class SqlNoteRepository(NoteRepository):
         with self._sessions.begin() as s:
             row = self._by_source(s, workspace_id, source_id)
             if row is not None:
+                # Its open and dismissed issues can't be fixed any more: mark them obsolete.
+                s.execute(
+                    update(ReviewIssueRow)
+                    .where(
+                        ReviewIssueRow.note_id == row.id,
+                        ReviewIssueRow.status.in_(
+                            [IssueStatus.OPEN.value, IssueStatus.DISMISSED.value]
+                        ),
+                    )
+                    .values(status=IssueStatus.OBSOLETE.value, closed_at=utcnow())
+                )
                 s.delete(row)
 
     def set_ignored(self, note_id, ignored) -> None:
@@ -434,6 +450,11 @@ class SqlKnowledgeRepository(KnowledgeRepository):
             s.execute(
                 update(IssuedQuestionRow)
                 .where(IssuedQuestionRow.point_id == point_id)
+                .values(point_id=into_id)
+            )
+            s.execute(
+                update(ReviewIssueRow)
+                .where(ReviewIssueRow.point_id == point_id)
                 .values(point_id=into_id)
             )
             old_mastery = s.get(MasteryRow, point_id)
@@ -745,3 +766,104 @@ class SqlWebImportRepository(WebImportRepository):
                 setattr(row, f, getattr(article, f))
             s.flush()
             return _web_article(row)
+
+
+def _issue(row: ReviewIssueRow) -> ReviewIssue:
+    return ReviewIssue(
+        id=row.id,
+        user_id=row.user_id,
+        workspace_id=row.workspace_id,
+        note_id=row.note_id,
+        note_path=tuple(row.note_path),
+        kind=IssueKind(row.kind),
+        quote=row.quote,
+        topic=row.topic,
+        problem=row.problem,
+        point_id=row.point_id,
+        status=IssueStatus(row.status),
+        fingerprint=row.fingerprint,
+        first_seen=row.first_seen,
+        last_seen=row.last_seen,
+        closed_at=row.closed_at,
+        closed_by=row.closed_by,
+    )
+
+
+class SqlIssueRepository(IssueRepository):
+    def __init__(self, sessions: sessionmaker[Session]):
+        self._sessions = sessions
+
+    def create(
+        self, user_id, workspace_id, note_id, note_path, kind, quote, topic, problem, point_id,
+        fingerprint, now,
+    ) -> ReviewIssue:  # fmt: skip
+        with self._sessions.begin() as s:
+            row = ReviewIssueRow(
+                user_id=user_id,
+                workspace_id=workspace_id,
+                note_id=note_id,
+                note_path=list(note_path),
+                kind=IssueKind(kind).value,
+                quote=quote,
+                topic=topic,
+                problem=problem,
+                point_id=point_id,
+                status=IssueStatus.OPEN.value,
+                fingerprint=fingerprint,
+                first_seen=now,
+                last_seen=now,
+            )
+            s.add(row)
+            s.flush()
+            return _issue(row)
+
+    def get(self, issue_id) -> ReviewIssue | None:
+        with self._sessions() as s:
+            row = s.get(ReviewIssueRow, issue_id)
+            return _issue(row) if row else None
+
+    def list_for_note(self, note_id, statuses=None) -> list[ReviewIssue]:
+        with self._sessions() as s:
+            query = select(ReviewIssueRow).where(ReviewIssueRow.note_id == note_id)
+            if statuses:
+                query = query.where(ReviewIssueRow.status.in_([x.value for x in statuses]))
+            return [_issue(r) for r in s.scalars(query.order_by(ReviewIssueRow.first_seen))]
+
+    def list(self, user_id, workspace_id=None, statuses=None, kinds=None) -> list[ReviewIssue]:
+        with self._sessions() as s:
+            query = (
+                select(ReviewIssueRow)
+                .outerjoin(NoteRow, NoteRow.id == ReviewIssueRow.note_id)
+                .where(ReviewIssueRow.user_id == user_id)
+                .where((NoteRow.id.is_(None)) | (NoteRow.ignored.is_(False)))
+            )
+            if workspace_id is not None:
+                query = query.where(ReviewIssueRow.workspace_id == workspace_id)
+            if statuses:
+                query = query.where(ReviewIssueRow.status.in_([x.value for x in statuses]))
+            if kinds:
+                query = query.where(ReviewIssueRow.kind.in_([k.value for k in kinds]))
+            return [_issue(r) for r in s.scalars(query.order_by(ReviewIssueRow.first_seen))]
+
+    def seen(self, issue_ids, now) -> None:
+        if not issue_ids:
+            return
+        with self._sessions.begin() as s:
+            s.execute(
+                update(ReviewIssueRow)
+                .where(ReviewIssueRow.id.in_(list(issue_ids)))
+                .values(last_seen=now)
+            )
+
+    def set_status(self, issue_id, status, now, closed_by) -> ReviewIssue:
+        with self._sessions.begin() as s:
+            row = s.get(ReviewIssueRow, issue_id)
+            if row is None:
+                raise LookupError(str(issue_id))
+            row.status = IssueStatus(status).value
+            if status == IssueStatus.OPEN:
+                row.closed_at, row.closed_by = None, None
+            else:
+                row.closed_at, row.closed_by = now, closed_by
+            s.flush()
+            return _issue(row)

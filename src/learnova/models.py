@@ -223,3 +223,40 @@ class WebArticle(BaseModel):
     first_seen_at: datetime
     imported_at: datetime | None
     checked_at: datetime | None
+
+
+class IssueKind(StrEnum):
+    FACTUAL_ERROR = "factual_error"
+    UNCLEAR = "unclear"
+    MISSING = "missing"
+
+
+class IssueStatus(StrEnum):
+    OPEN = "open"
+    FIXED = "fixed"
+    DISMISSED = "dismissed"
+    OBSOLETE = "obsolete"  # its note was deleted
+
+
+class ReviewIssue(BaseModel):
+    """A problem a review found in a note. It stays open until a later review sees it fixed, or
+    you fix or dismiss it by hand."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    workspace_id: uuid.UUID
+    note_id: uuid.UUID | None  # None once the note is deleted
+    note_path: tuple[str, ...]  # where it was found, kept for obsolete issues
+    kind: IssueKind
+    quote: str  # the passage, empty for `missing`
+    topic: str  # for `missing`: the topic that's missing; empty otherwise
+    problem: str  # what's wrong; for `missing`: why the note should cover it
+    point_id: uuid.UUID | None
+    status: IssueStatus
+    fingerprint: str
+    first_seen: datetime
+    last_seen: datetime
+    closed_at: datetime | None
+    closed_by: str | None  # "review", "user" or "notion"

@@ -233,3 +233,31 @@ class WebArticleRow(Base):
     first_seen_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     imported_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class ReviewIssueRow(Base):
+    __tablename__ = "review_issues"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    # Deleting a note marks its issues obsolete (NoteRepository.delete), then this goes to NULL.
+    note_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("notes.id", ondelete="SET NULL"), index=True
+    )
+    note_path: Mapped[list[str]] = mapped_column(JSON)
+    kind: Mapped[str] = mapped_column(String(16))
+    quote: Mapped[str] = mapped_column(Text, default="")
+    topic: Mapped[str] = mapped_column(Text, default="")
+    problem: Mapped[str] = mapped_column(Text)
+    point_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("knowledge_points.id", ondelete="SET NULL"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    first_seen: Mapped[datetime] = mapped_column(UTCDateTime)
+    last_seen: Mapped[datetime] = mapped_column(UTCDateTime)
+    closed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    closed_by: Mapped[str | None] = mapped_column(String(16))

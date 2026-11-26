@@ -13,6 +13,8 @@ from learnova.models import (
     Attempt,
     ImageRef,
     IssuedQuestion,
+    IssueKind,
+    IssueStatus,
     KnowledgePoint,
     Mastery,
     Note,
@@ -20,6 +22,7 @@ from learnova.models import (
     NoteSummary,
     PointSource,
     QuestionType,
+    ReviewIssue,
     User,
     WebArticle,
     WebArticleState,
@@ -286,3 +289,53 @@ class WebImportRepository(ABC):
     @abstractmethod
     def save_article(self, article: WebArticle) -> WebArticle:
         """Write every field of an existing article (matched by id)."""
+
+
+class IssueRepository(ABC):
+    @abstractmethod
+    def create(
+        self,
+        user_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        note_id: uuid.UUID,
+        note_path: tuple[str, ...],
+        kind: IssueKind,
+        quote: str,
+        topic: str,
+        problem: str,
+        point_id: uuid.UUID | None,
+        fingerprint: str,
+        now: datetime,
+    ) -> ReviewIssue: ...
+
+    @abstractmethod
+    def get(self, issue_id: uuid.UUID) -> ReviewIssue | None: ...
+
+    @abstractmethod
+    def list_for_note(
+        self, note_id: uuid.UUID, statuses: list[IssueStatus] | None = None
+    ) -> list[ReviewIssue]: ...
+
+    @abstractmethod
+    def list(
+        self,
+        user_id: uuid.UUID,
+        workspace_id: uuid.UUID | None = None,
+        statuses: list[IssueStatus] | None = None,
+        kinds: list[IssueKind] | None = None,
+    ) -> list[ReviewIssue]:
+        """Issues of notes hidden by .learnovaignore are left out."""
+
+    @abstractmethod
+    def seen(self, issue_ids: list[uuid.UUID], now: datetime) -> None:
+        """A review saw these issues still present."""
+
+    @abstractmethod
+    def set_status(
+        self,
+        issue_id: uuid.UUID,
+        status: IssueStatus,
+        now: datetime,
+        closed_by: str | None,
+    ) -> ReviewIssue:
+        """OPEN clears the closed time; any other status sets it."""

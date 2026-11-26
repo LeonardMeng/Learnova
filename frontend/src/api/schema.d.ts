@@ -530,6 +530,16 @@ export interface components {
              */
             missing_topics: number;
             /**
+             * Fixed
+             * @default 0
+             */
+            fixed: number;
+            /**
+             * Open
+             * @default 0
+             */
+            open: number;
+            /**
              * Possible Duplicates
              * @default 0
              */

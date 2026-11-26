@@ -32,19 +32,36 @@ Put in `new_points` only points the note covers that none of the labels above al
 For each, set importance from 1 to 5: 5 = core idea of the topic, likely to be asked about;
 3 = useful detail; 1 = trivia.
 
-# 2. Issues
+# 2. Issues already recorded for this note
+
+Open issues (found by an earlier review):
+{open_issues}
+
+For every open issue above, return exactly one entry in `issue_status`, using its label:
+- "fixed": the note no longer has this problem (the passage was corrected, clarified or added).
+- "still_present": the problem is still there.
+
+Dismissed issues (the student decided these are not problems; never raise them again, even
+reworded):
+{dismissed_issues}
+
+# 3. New issues
+
+Only problems that are not already listed above as open or dismissed.
 
 - "factual_error": a statement that is wrong. Only flag it if you are confident. Say what is
   wrong and what is actually true.
 - "unclear": an explanation that is ambiguous, too vague to learn from, or stops halfway.
 
 For each issue, `quote` must be the exact passage from the note (a short excerpt), and `problem`
-says what is wrong with it.
+says what is wrong with it. Set `point` to the label of the knowledge point the issue is about:
+a P-label from the list above, or N1, N2, … for your `new_points` in the order you listed them.
+Use null if it is about no particular point.
 
-# 3. Missing
+# 4. Missing
 
 Topics that a note with this title should cover but that are not in this note and not in the other
 notes listed above. At most 5, most important first. If the note is only an index of other pages,
-return none.
+return none. Set `point` as for issues (usually null, since the topic isn't in the note yet).
 
 Write everything in the language of the note.

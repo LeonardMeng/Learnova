@@ -45,6 +45,12 @@ DEFAULT_CONFIG = """\
 # multiple_choice = 0.6
 # true_false = 0.3
 
+[issues]
+# Which review issue to fix first: priority = weight × importance × (1 + (1 − mastery)).
+# factual_error = 3
+# unclear = 2
+# missing = 1
+
 [api]
 # Browser origins allowed to call `learnova serve` (it only listens on 127.0.0.1).
 # allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]

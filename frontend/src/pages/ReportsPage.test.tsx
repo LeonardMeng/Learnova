@@ -41,7 +41,7 @@ describe("Reports page", () => {
       "POST /api/workspaces/interview/review": () => {
         reports = [{ name: "2026-11-25-review-2.md", size: 5, modified: "2026-11-25T04:00:00Z" }, ...reports];
         return { json: { nothing_to_review: false, reviewed: 1, skipped: 0, failed: [], new_points: 2, issues: 1,
-          missing_topics: 0, possible_duplicates: 0, report: "2026-11-25-review-2.md", model: "m", pending_images: 0 } };
+          missing_topics: 0, fixed: 1, open: 3, possible_duplicates: 0, report: "2026-11-25-review-2.md", model: "m", pending_images: 0 } };
       },
     });
     const user = userEvent.setup();
@@ -53,6 +53,7 @@ describe("Reports page", () => {
 
     await user.click(screen.getByRole("button", { name: "Run review" }));
     expect(await screen.findByText(/Reviewed 1 note/)).toBeInTheDocument();
+    expect(screen.getByText(/1 new issue\(s\), 1 fixed, 3 open/)).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Second" })).toBeInTheDocument(); // new report opened
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ all: false });
   });

@@ -1,6 +1,7 @@
-"""Gap review: for each changed note, one model call extracts knowledge points and flags
-problems, and a second call (only when there are new points) checks the new points against all of
-the user's existing ones. Notes are never edited; results go to the database and the report.
+"""Gap review: for each changed note, one model call extracts knowledge points, flags problems and
+says which of the note's open issues are fixed; a second call (only when there are new points)
+checks the new points against all of the user's existing ones. Notes are never edited; results go
+to the database (points, issues) and the report.
 
 The two model calls are passed in as functions, so tests can replace them with fakes."""
 
@@ -10,6 +11,7 @@ import difflib
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
@@ -17,7 +19,16 @@ from typing import Literal
 from pydantic import BaseModel
 
 from learnova.llm import factory, prompts
-from learnova.models import KnowledgePoint, Note, PointSource, Workspace
+from learnova.models import (
+    IssueKind,
+    IssueStatus,
+    KnowledgePoint,
+    Note,
+    PointSource,
+    ReviewIssue,
+    Workspace,
+)
+from learnova.services.issues import fingerprint
 from learnova.storage.database import Repositories
 from learnova.sync import CACHE_DIR, cache_filename
 
@@ -45,16 +56,24 @@ class Issue(BaseModel):
     kind: Literal["factual_error", "unclear"]
     quote: str
     problem: str
+    point: str | None = None  # label of the point it's about: "P2", "N1", or None
 
 
 class Missing(BaseModel):
     topic: str
     why: str
+    point: str | None = None
+
+
+class IssueCheck(BaseModel):
+    ref: str  # "I1"
+    status: Literal["still_present", "fixed"]
 
 
 class NoteReview(BaseModel):
     existing: list[ExistingPoint]
     new_points: list[NewPoint]
+    issue_status: list[IssueCheck] = []  # one per open issue (I-label)
     issues: list[Issue]
     missing: list[Missing]
 
@@ -77,6 +96,8 @@ class ReviewRequest:
     markdown: str
     other_notes: list[str]
     existing: dict[str, KnowledgePoint]  # "P1" -> point
+    open_issues: dict[str, ReviewIssue] = field(default_factory=dict)  # "I1" -> issue
+    dismissed: dict[str, ReviewIssue] = field(default_factory=dict)  # "D1": don't raise again
 
 
 @dataclass(frozen=True)
@@ -119,8 +140,9 @@ class PointOutcome:
 class NoteResult:
     note: Note
     outcomes: list[PointOutcome] = field(default_factory=list)
-    issues: list[Issue] = field(default_factory=list)
-    missing: list[Missing] = field(default_factory=list)
+    new_issues: list[ReviewIssue] = field(default_factory=list)
+    fixed_issues: list[ReviewIssue] = field(default_factory=list)
+    still_open: list[ReviewIssue] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -175,8 +197,15 @@ def review_notes(
 def _review_one(repos, user_id, note, markdown, titles, reviewer, deduper) -> NoteResult:
     existing = {f"P{i}": p for i, p in enumerate(repos.knowledge.list_for_note(note.id), 1)}
     others = [t for t in titles if t != " / ".join(note.path)]
-    review = reviewer(ReviewRequest(note, markdown, others, existing))
-    result = NoteResult(note, issues=review.issues, missing=review.missing)
+    open_issues = {
+        f"I{i}": x for i, x in enumerate(repos.issues.list_for_note(note.id, [IssueStatus.OPEN]), 1)
+    }
+    dismissed = {
+        f"D{i}": x
+        for i, x in enumerate(repos.issues.list_for_note(note.id, [IssueStatus.DISMISSED]), 1)
+    }
+    review = reviewer(ReviewRequest(note, markdown, others, existing, open_issues, dismissed))
+    result = NoteResult(note)
 
     # 1. Decide what happens to each existing point. Anything not mentioned is kept.
     decisions: dict[str, ExistingPoint] = {}
@@ -236,15 +265,68 @@ def _review_one(repos, user_id, note, markdown, titles, reviewer, deduper) -> No
     if unmentioned:
         result.warnings.append(f"{len(unmentioned)} existing point(s) not mentioned; kept.")
 
+    # Points the issues can refer to: P-labels, and N-labels of new (or revived) points.
+    by_label: dict[str, KnowledgePoint] = dict(existing)
+    for new_ref, cand in matches.items():
+        if cand.point.id in own_ids:
+            by_label[new_ref] = cand.point
     for new_ref, item in new.items():
         point = repos.knowledge.create(
             user_id, item.name.strip(), item.summary.strip(), max(1, min(5, item.importance))
         )
         repos.knowledge.link(point.id, note.id)
+        by_label[new_ref] = point
         result.outcomes.append(
             PointOutcome(Status.NEW, point, possible_duplicate=matches.get(new_ref))
         )
+
+    _update_issues(repos, user_id, note, review, open_issues, dismissed, by_label, result)
     return result
+
+
+def _update_issues(repos, user_id, note, review, open_issues, dismissed, by_label, result) -> None:
+    """Close the issues the model saw fixed, keep the rest open, and add genuinely new ones."""
+    now = datetime.now(UTC)
+    verdicts: dict[str, str] = {}
+    for check in review.issue_status:
+        if check.ref in open_issues and check.ref not in verdicts:
+            verdicts[check.ref] = check.status
+    still = []
+    for ref, issue in open_issues.items():
+        if verdicts.get(ref) == "fixed":
+            result.fixed_issues.append(
+                repos.issues.set_status(issue.id, IssueStatus.FIXED, now, "review")
+            )
+        else:  # still present, or not mentioned: an issue is only closed on a clear "fixed"
+            still.append(issue)
+    unmentioned = sum(1 for ref in open_issues if ref not in verdicts)
+    if unmentioned:
+        result.warnings.append(f"{unmentioned} open issue(s) not mentioned; kept open.")
+
+    # Never raise an issue that is already open or that you dismissed (the model is told so;
+    # this is the safety net).
+    known = {x.fingerprint: x for x in [*still, *dismissed.values()]}
+    reseen = {x.id for x in still}
+    found = [
+        (IssueKind(i.kind), i.quote.strip(), "", i.problem.strip(), i.point) for i in review.issues
+    ] + [(IssueKind.MISSING, "", m.topic.strip(), m.why.strip(), m.point) for m in review.missing]
+    for kind, quote, topic, problem, label in found:
+        if not (quote or topic) or not problem:
+            continue
+        fp = fingerprint(kind, quote, topic)
+        if fp in known:
+            if known[fp].status == IssueStatus.OPEN:
+                reseen.add(known[fp].id)
+            continue
+        point = by_label.get(label or "")
+        issue = repos.issues.create(
+            user_id, note.workspace_id, note.id, note.path, kind, quote, topic, problem,
+            point.id if point else None, fp, now,
+        )  # fmt: skip
+        known[fp] = issue
+        result.new_issues.append(issue)
+    repos.issues.seen(list(reseen), now)
+    result.still_open = still
 
 
 def _candidates(repos, user_id, new: dict[str, NewPoint]) -> dict[str, Candidate]:
@@ -303,6 +385,10 @@ def llm_reviewer(model) -> Reviewer:
             note=req.markdown,
             other_notes="\n".join(f"- {t}" for t in req.other_notes) or "(none)",
             existing_points=existing or "(none yet: return an empty `existing` list)",
+            open_issues="\n".join(_issue_line(r, x) for r, x in req.open_issues.items())
+            or "(none: return an empty `issue_status` list)",
+            dismissed_issues="\n".join(_issue_line(r, x) for r, x in req.dismissed.items())
+            or "(none)",
         )
         return factory.ask_structured(model, NoteReview, prompt)
 
@@ -322,6 +408,12 @@ def llm_deduper(model) -> Deduper:
         return factory.ask_structured(model, DuplicateCheck, prompt)
 
     return check
+
+
+def _issue_line(ref: str, issue: ReviewIssue) -> str:
+    if issue.kind == IssueKind.MISSING:
+        return f"{ref}  missing topic: {issue.topic} ({issue.problem})"
+    return f'{ref}  {issue.kind.value}: "{issue.quote}" ({issue.problem})'
 
 
 def where(sources: list[PointSource]) -> str:
@@ -346,6 +438,7 @@ class ReviewOutcome:
     report: Path
     model: str
     pending_images: int  # images without a description: the review couldn't see them
+    open_issues: int = 0  # open issues in the workspace after this run
 
 
 def run_review(
@@ -359,6 +452,7 @@ def run_review(
     nothing to review."""
     from learnova.config import load_settings
     from learnova.report import write_review_report
+    from learnova.services import issues as issues_service
     from learnova.services.images import pending_images
 
     notes = notes_to_review(repos, workspace, everything)
@@ -373,5 +467,8 @@ def run_review(
         workspace, repos, notes, llm_reviewer(model), llm_deduper(model), on_note=on_note
     )
     user = repos.users.get_or_create_local()
-    path = write_review_report(run, settings.main, repos.knowledge.list_for_user(user.id))
-    return ReviewOutcome(run, path, settings.main, pending)
+    open_issues = issues_service.ranked(repos, load_settings().issues, workspace.id)
+    path = write_review_report(
+        run, settings.main, repos.knowledge.list_for_user(user.id), open_issues
+    )
+    return ReviewOutcome(run, path, settings.main, pending, len(open_issues))

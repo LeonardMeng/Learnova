@@ -368,6 +368,67 @@ shortcut; importance and parents can be changed from the detail panel; an issue 
 from the Issues page and stays dismissed after a new review; `npm test`, `npm run typecheck` and
 `npm run build` pass.
 
+**Layout (UI example, 2026-11-26).** The app moves to a sidebar layout like this example:
+
+```text
+┌──────────────────────────────┐┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ Logo Learnova                ││ Top Toolbar                                                                         │ 
+│ ┌──────────────────────────┐ │
+│ │ Search                   │ │
+│ └──────────────────────────┘ │
+│                              │
+│ ┌────┐ ┌─────────┐ ┌──────┐  │
+│ │KP  │ │WorkSpace│ │Report│  │
+│ └────┘ └─────────┘ └──────┘  │
+│                              │
+│ ┌──────────────────────────┐ │
+│ │ 📄 LangChain             │ │
+│ │ 🤖 Artificial Intelligence│ │
+│ │ 📄 Interview Questions   │ │
+│ │ 📄 Redis                 │ │
+│ │ 📄 Database              │ │
+│ │ 📄 Data Structure ...    │ │
+│ │ 📄 Behaviour Questions   │ │
+│ │ 🖥 CS Knowledge           │ │
+│ │ 📄 Command Line           │ │
+│ │ 📄 Git                    │ │
+│ │ 📄 Frontend               │ │
+│ │ 📄 Backend                │ │
+│ │ 📄 Redis                  │ │
+│ │ 📄 PTE                    │ │
+│ │ 📄 AWS                    │ │
+│ │ 📄 AWS Cloud Practitioner  │ │
+│ │ 📄 Everyday Life          │ │
+│ │ 📄 菜谱                    │ │
+│ │ 📄 旅行清单                │ │
+│ └──────────────────────────┘ │
+│                              │
+│                              │
+│                              │
+│                              │
+│ ──────────────────────────── │
+│ Customize sidebar            │
+│                              │
+│                              │
+│ ┌──────────────────────────┐ │
+│ │ User Profile             │ │
+│ │ Avatar + Account         │ │
+│ └──────────────────────────┘ │
+└──────────────────────────────┘
+```
+
+Draft reading, to be confirmed when this milestone is planned (see the open questions below):
+
+- **Sidebar, top to bottom:** the Learnova logo; a search box that searches the current tab;
+  three tabs, **KP** (the knowledge-point tree), **WorkSpace** (each workspace's Notion page tree,
+  with the pages' own Notion icons) and **Report** (review reports); the tree or list for the
+  chosen tab; "Customize sidebar"; the user profile at the bottom.
+- **Main area:** a top toolbar above the page for whatever is selected in the sidebar (a point's
+  detail, a note with its issues, a report). Quiz and Issues are reached from the toolbar.
+- **Page icons** come from Notion (`pages.retrieve` returns each page's emoji or icon); `sync`
+  would store them with each note. 📄 is the fallback.
+
+
 ### 5. Quiz on chosen points or a topic
 
 - `learnova quiz --point <ref> [--point <ref> …]` or `--topic <ref>`. A topic expands to every
@@ -414,6 +475,13 @@ Open questions for Version 2.2:
    its points? (Draft: only its points.)
 2. `kp organize` on many points: above a few hundred, send points in batches per workspace or per
    top-level topic?
+3. Layout example (milestone 4): where do Quiz and Issues live: toolbar buttons, or more sidebar
+   tabs next to KP / WorkSpace / Report?
+4. Does the WorkSpace tab show every workspace's page tree together (as in the example) or one
+   workspace at a time? What does clicking a page open: the note's issues and points, or Notion?
+5. "Customize sidebar": which choices (reorder or hide tabs, hide workspaces, pin pages)?
+6. "User Profile": version 1 has one local user and no accounts. Show the local user and a link
+   to settings (models, keys status), or leave it as a placeholder until multi-user?
 
 ## Version 2.3
 

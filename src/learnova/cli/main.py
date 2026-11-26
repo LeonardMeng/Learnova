@@ -12,6 +12,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from learnova.cli import issues as issues_cli
 from learnova.cli import kp, web, workspace
 from learnova.cli.common import repositories, short_path, user_errors
 from learnova.config import load_settings
@@ -31,6 +32,7 @@ app = typer.Typer(
 )
 app.add_typer(workspace.app, name="workspace")
 app.add_typer(kp.app, name="kp")
+app.add_typer(issues_cli.app, name="issues")
 app.add_typer(web.app, name="web")
 
 
@@ -182,12 +184,13 @@ def review(
     run = outcome.run
     outcomes = [o for r in run.reviewed for o in r.outcomes]
     new = sum(1 for o in outcomes if o.status == review_service.Status.NEW)
-    issues = sum(len(r.issues) for r in run.reviewed)
-    missing = sum(len(r.missing) for r in run.reviewed)
+    new_issues = sum(len(r.new_issues) for r in run.reviewed)
+    fixed = sum(len(r.fixed_issues) for r in run.reviewed)
     dups = sum(1 for o in outcomes if o.possible_duplicate)
     typer.echo(
-        f"\n{len(run.reviewed)} reviewed · {new} new point(s) · {issues} issue(s) · "
-        f"{missing} missing topic(s)" + (f" · {dups} possible duplicate(s)" if dups else "")
+        f"\n{len(run.reviewed)} reviewed · {new} new point(s) · {new_issues} new issue(s) · "
+        f"{fixed} fixed · {outcome.open_issues} open"
+        + (f" · {dups} possible duplicate(s)" if dups else "")
     )
     if run.failed:
         typer.secho(
