@@ -54,7 +54,7 @@ def create_app(
 ) -> FastAPI:
     """`frontend_dist`: the built web app to serve at /; "auto" finds frontend/dist, None serves
     the API only."""
-    from learnova.api.routes import points, quiz, status, workspaces
+    from learnova.api.routes import issues, notes, points, quiz, status, workspaces
 
     app = FastAPI(
         title="Learnova",
@@ -102,7 +102,7 @@ def create_app(
     def health() -> dict:
         return {"status": "ok"}
 
-    for module in (workspaces, points, status, quiz):
+    for module in (workspaces, notes, points, issues, status, quiz):
         app.include_router(module.router)
     if frontend_dist is not None:
         _serve_frontend(app, None if frontend_dist == "auto" else Path(frontend_dist))

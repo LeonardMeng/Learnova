@@ -378,6 +378,155 @@
         }
       }
     },
+    "/api/workspaces/{name}/notes": {
+      "get": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "List Notes",
+        "description": "Every note in Notion order of their paths (parents before their sub-pages), ignored ones\nincluded and marked.",
+        "operationId": "list_notes_api_workspaces__name__notes_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NoteOut"
+                  },
+                  "title": "Response List Notes Api Workspaces  Name  Notes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{name}/notes/{note_id}": {
+      "get": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Get Note",
+        "operationId": "get_note_api_workspaces__name__notes__note_id__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "note_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Note Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/web-imports": {
+      "get": {
+        "tags": [
+          "notes",
+          "web imports"
+        ],
+        "summary": "List Web Imports",
+        "description": "The sites imported with `learnova web import`, newest first.",
+        "operationId": "list_web_imports_api_web_imports_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WebImportOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Web Imports Api Web Imports Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "tags": [
+          "notes",
+          "meta"
+        ],
+        "summary": "Me",
+        "description": "The local user (there are no accounts yet).",
+        "operationId": "me_api_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/points": {
       "get": {
         "tags": [
@@ -431,6 +580,60 @@
         }
       }
     },
+    "/api/points/tree": {
+      "get": {
+        "tags": [
+          "knowledge points"
+        ],
+        "summary": "Tree",
+        "description": "Every point under its primary parent, depth first, most important first. With a\nworkspace: its points and the topics above them.",
+        "operationId": "tree_api_points_tree_get",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TreePointOut"
+                  },
+                  "title": "Response Tree Api Points Tree Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/points/{point_id}": {
       "get": {
         "tags": [
@@ -456,7 +659,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PointOut"
+                  "$ref": "#/components/schemas/PointDetailOut"
                 }
               }
             }
@@ -477,8 +680,9 @@
         "tags": [
           "knowledge points"
         ],
-        "summary": "Set Importance",
-        "operationId": "set_importance_api_points__point_id__patch",
+        "summary": "Update Point",
+        "description": "Change importance, the primary parent (`parent_id`, null = top level) and the shortcuts.\nA change that breaks a rule (a loop, more than 4 levels, more than 2 shortcuts) is refused\nwith 409 and nothing changes.",
+        "operationId": "update_point_api_points__point_id__patch",
         "parameters": [
           {
             "name": "point_id",
@@ -496,7 +700,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ImportanceIn"
+                "$ref": "#/components/schemas/PointPatchIn"
               }
             }
           }
@@ -507,7 +711,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PointOut"
+                  "$ref": "#/components/schemas/PointDetailOut"
                 }
               }
             }
@@ -561,6 +765,152 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MergeOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/issues": {
+      "get": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "List Issues",
+        "description": "Highest priority first. Issues of notes hidden by .learnovaignore are left out.",
+        "operationId": "list_issues_api_issues_get",
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "open",
+                "fixed",
+                "dismissed",
+                "obsolete",
+                "all"
+              ],
+              "type": "string",
+              "default": "open",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "factual_error",
+                    "unclear",
+                    "missing"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IssueOut"
+                  },
+                  "title": "Response List Issues Api Issues Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/issues/{issue_id}": {
+      "patch": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "Change Status",
+        "description": "`fixed` or `dismissed` for an open issue, `open` to reopen one. A dismissed issue is not\nraised again by later reviews. 409 if the issue's status doesn't allow the change.",
+        "operationId": "change_status_api_issues__issue_id__patch",
+        "parameters": [
+          {
+            "name": "issue_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Issue Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssuePatchIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueOut"
                 }
               }
             }
@@ -913,6 +1263,45 @@
         ],
         "title": "AnswerOut"
       },
+      "AttemptOut": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "feedback": {
+            "type": "string",
+            "title": "Feedback"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "type",
+          "answer",
+          "score",
+          "feedback",
+          "created_at"
+        ],
+        "title": "AttemptOut"
+      },
       "ChangeOut": {
         "properties": {
           "kind": {
@@ -1020,20 +1409,172 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "ImportanceIn": {
+      "IssueOut": {
         "properties": {
-          "importance": {
-            "type": "integer",
-            "maximum": 5.0,
-            "minimum": 1.0,
-            "title": "Importance"
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "factual_error",
+              "unclear",
+              "missing"
+            ],
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "fixed",
+              "dismissed",
+              "obsolete"
+            ],
+            "title": "Status"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          },
+          "note_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Note Path"
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PointRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "priority": {
+            "type": "number",
+            "title": "Priority"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "first_seen": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen"
+          },
+          "last_seen": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "closed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed By"
           }
         },
         "type": "object",
         "required": [
-          "importance"
+          "id",
+          "kind",
+          "status",
+          "quote",
+          "topic",
+          "problem",
+          "workspace",
+          "note_path",
+          "point",
+          "priority",
+          "url",
+          "first_seen",
+          "last_seen",
+          "closed_at",
+          "closed_by"
         ],
-        "title": "ImportanceIn"
+        "title": "IssueOut"
+      },
+      "IssuePatchIn": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "fixed",
+              "dismissed"
+            ],
+            "title": "Status",
+            "description": "fixed / dismissed for an open issue; open to reopen a fixed or dismissed one"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "IssuePatchIn"
+      },
+      "MeOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "MeOut"
       },
       "MergeIn": {
         "properties": {
@@ -1066,6 +1607,330 @@
           "removed"
         ],
         "title": "MergeOut"
+      },
+      "NoteDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "notion_url": {
+            "type": "string",
+            "title": "Notion Url"
+          },
+          "ignored": {
+            "type": "boolean",
+            "title": "Ignored"
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points"
+          },
+          "open_issues": {
+            "type": "integer",
+            "title": "Open Issues"
+          },
+          "last_edited": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Edited"
+          },
+          "reviewed": {
+            "type": "boolean",
+            "title": "Reviewed"
+          },
+          "knowledge_points": {
+            "items": {
+              "$ref": "#/components/schemas/PointOut"
+            },
+            "type": "array",
+            "title": "Knowledge Points"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/IssueOut"
+            },
+            "type": "array",
+            "title": "Issues"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "path",
+          "icon",
+          "notion_url",
+          "ignored",
+          "points",
+          "open_issues",
+          "last_edited",
+          "reviewed",
+          "knowledge_points",
+          "issues"
+        ],
+        "title": "NoteDetailOut"
+      },
+      "NoteOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "notion_url": {
+            "type": "string",
+            "title": "Notion Url"
+          },
+          "ignored": {
+            "type": "boolean",
+            "title": "Ignored"
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points"
+          },
+          "open_issues": {
+            "type": "integer",
+            "title": "Open Issues"
+          },
+          "last_edited": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Edited"
+          },
+          "reviewed": {
+            "type": "boolean",
+            "title": "Reviewed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "path",
+          "icon",
+          "notion_url",
+          "ignored",
+          "points",
+          "open_issues",
+          "last_edited",
+          "reviewed"
+        ],
+        "title": "NoteOut"
+      },
+      "NoteRefOut": {
+        "properties": {
+          "workspace": {
+            "type": "string",
+            "title": "Workspace"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "notion_url": {
+            "type": "string",
+            "title": "Notion Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace",
+          "path",
+          "notion_url"
+        ],
+        "title": "NoteRefOut"
+      },
+      "PointDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "importance": {
+            "type": "integer",
+            "title": "Importance"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "mastery": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mastery"
+          },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count"
+          },
+          "last_reviewed": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "shortcuts": {
+            "items": {
+              "$ref": "#/components/schemas/PointRefOut"
+            },
+            "type": "array",
+            "title": "Shortcuts"
+          },
+          "paths": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Paths"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopicOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/PointRefOut"
+            },
+            "type": "array",
+            "title": "Children"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/NoteRefOut"
+            },
+            "type": "array",
+            "title": "Notes"
+          },
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptOut"
+            },
+            "type": "array",
+            "title": "Attempts"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/IssueOut"
+            },
+            "type": "array",
+            "title": "Issues"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "summary",
+          "importance",
+          "sources",
+          "mastery",
+          "review_count",
+          "last_reviewed",
+          "parent_id",
+          "shortcuts",
+          "paths",
+          "topic",
+          "children",
+          "notes",
+          "attempts",
+          "issues"
+        ],
+        "title": "PointDetailOut"
       },
       "PointOut": {
         "properties": {
@@ -1133,6 +1998,53 @@
           "last_reviewed"
         ],
         "title": "PointOut"
+      },
+      "PointPatchIn": {
+        "properties": {
+          "importance": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 5.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "shortcuts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shortcuts"
+          }
+        },
+        "type": "object",
+        "title": "PointPatchIn",
+        "description": "Only the fields you send change. `parent_id: null` moves the point to the top level;\n`shortcuts` replaces its shortcut parents (at most 2)."
       },
       "PointRefOut": {
         "properties": {
@@ -1659,6 +2571,155 @@
         ],
         "title": "SyncOut"
       },
+      "TopicOut": {
+        "properties": {
+          "mastery": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mastery"
+          },
+          "quizzed": {
+            "type": "integer",
+            "title": "Quizzed"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mastery",
+          "quizzed",
+          "total"
+        ],
+        "title": "TopicOut"
+      },
+      "TreePointOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "importance": {
+            "type": "integer",
+            "title": "Importance"
+          },
+          "level": {
+            "type": "integer",
+            "title": "Level"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "shortcuts": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Shortcuts"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopicOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mastery": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mastery"
+          },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count"
+          },
+          "last_reviewed": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed"
+          },
+          "open_issues": {
+            "type": "integer",
+            "title": "Open Issues"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "summary",
+          "importance",
+          "level",
+          "parent_id",
+          "shortcuts",
+          "path",
+          "topic",
+          "mastery",
+          "review_count",
+          "last_reviewed",
+          "open_issues",
+          "sources"
+        ],
+        "title": "TreePointOut",
+        "description": "One row of the knowledge tree, in tree order (depth first)."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -1715,6 +2776,76 @@
           "weight"
         ],
         "title": "WeakPointOut"
+      },
+      "WebImportOut": {
+        "properties": {
+          "index_url": {
+            "type": "string",
+            "title": "Index Url"
+          },
+          "notion_url": {
+            "type": "string",
+            "title": "Notion Url"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "imported": {
+            "type": "integer",
+            "title": "Imported"
+          },
+          "new": {
+            "type": "integer",
+            "title": "New"
+          },
+          "removed": {
+            "type": "integer",
+            "title": "Removed"
+          },
+          "last_checked": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index_url",
+          "notion_url",
+          "folder",
+          "created_at",
+          "completed_at",
+          "imported",
+          "new",
+          "removed",
+          "last_checked"
+        ],
+        "title": "WebImportOut"
       },
       "WorkspaceIn": {
         "properties": {

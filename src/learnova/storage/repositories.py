@@ -107,6 +107,9 @@ class NoteRepository(ABC):
     def mark_reviewed(self, note_id: uuid.UUID, content_hash: str) -> None: ...
 
     @abstractmethod
+    def set_icon(self, note_id: uuid.UUID, icon: str | None) -> None: ...
+
+    @abstractmethod
     def mark_issues_reviewed(self, note_id: uuid.UUID, content_hash: str) -> None:
         """Record that the note's issues were updated for this version of its text."""
 

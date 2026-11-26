@@ -285,6 +285,8 @@ def sync_workspace(
             and summary.source_id not in refresh
             and _can_skip(previous, summary, cache_file)
         ):
+            if previous.icon != summary.icon:  # e.g. notes synced before icons were stored
+                notes.set_icon(previous.id, summary.icon)
             if previous.ignored:  # un-ignored and unchanged: just show it again
                 notes.set_ignored(previous.id, False)
                 emit(NoteChange(Change.RESTORED, summary.source_id, summary.path))

@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from learnova.errors import LearnovaError
+from learnova.errors import ConflictError
 from learnova.models import KnowledgePoint, Mastery, ParentLink
 from learnova.storage.database import Repositories
 
@@ -20,8 +20,8 @@ MAX_DEPTH = 4
 MAX_SHORTCUTS = 2
 
 
-class HierarchyError(LearnovaError):
-    pass
+class HierarchyError(ConflictError):
+    """A change that would break a rule (the API answers 409)."""
 
 
 @dataclass

@@ -189,4 +189,16 @@ def _summary(
         path=path,
         last_edited=datetime.fromisoformat(page["last_edited_time"]),
         parent_id=parent_id,
+        icon=page_icon(page),
     )
+
+
+def page_icon(page: dict[str, Any]) -> str | None:
+    """The page's emoji, or the URL of an external icon. Icons uploaded to Notion are left out:
+    their URLs expire after an hour."""
+    icon = page.get("icon") or {}
+    if icon.get("type") == "emoji":
+        return icon.get("emoji")
+    if icon.get("type") == "external":
+        return (icon.get("external") or {}).get("url")
+    return None

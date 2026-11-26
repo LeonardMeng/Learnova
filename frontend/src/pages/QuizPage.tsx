@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { api, ApiError, type QuizKind } from "../api/client";
-import { ErrorBox, MasteryBar, ScoreBadge, Spinner } from "../components/ui";
+import { ErrorBox, MasteryBar, ScoreBadge, Spinner, WorkspacePicker } from "../components/ui";
 import { loadSession, newSession, saveSession, type Session } from "../quiz/session";
 import { useWorkspace } from "../workspace";
 
@@ -119,7 +119,10 @@ function StartForm({ workspace, onStart }: { workspace: string | null; onStart: 
   const n = Math.min(50, Math.max(1, Math.floor(Number(count)) || 0));
   return (
     <section className="card start">
-      <h1>Quiz</h1>
+      <div className="page-head">
+        <h1>Quiz</h1>
+        <WorkspacePicker />
+      </div>
       <fieldset>
         <legend>Question type</legend>
         {KINDS.map((k) => (
@@ -289,7 +292,7 @@ function Summary({ session, onRestart }: { session: Session; onRestart: () => vo
       )}
       <div className="actions">
         <button onClick={onRestart}>Start another quiz</button>
-        <Link to="/status">See status</Link>
+        <Link to="/points">See your points</Link>
       </div>
     </section>
   );

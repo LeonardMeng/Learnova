@@ -98,6 +98,7 @@ class NoteRow(Base):
     reviewed_hash: Mapped[str | None] = mapped_column(String(64))  # content_hash at last review
     # content_hash when the review last updated this note's issues; unchanged text keeps them as is.
     issues_hash: Mapped[str | None] = mapped_column(String(64))
+    icon: Mapped[str | None] = mapped_column(String(500))  # Notion page emoji or icon URL
     # Hidden by .learnovaignore: kept with its links, but left out of review, quiz and status.
     ignored: Mapped[bool] = mapped_column(default=False, server_default=false())
 

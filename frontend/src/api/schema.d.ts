@@ -141,6 +141,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{name}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notes
+         * @description Every note in Notion order of their paths (parents before their sub-pages), ignored ones
+         *     included and marked.
+         */
+        get: operations["list_notes_api_workspaces__name__notes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{name}/notes/{note_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Note */
+        get: operations["get_note_api_workspaces__name__notes__note_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/web-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Web Imports
+         * @description The sites imported with `learnova web import`, newest first.
+         */
+        get: operations["list_web_imports_api_web_imports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Me
+         * @description The local user (there are no accounts yet).
+         */
+        get: operations["me_api_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/points": {
         parameters: {
             query?: never;
@@ -150,6 +228,27 @@ export interface paths {
         };
         /** List Points */
         get: operations["list_points_api_points_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/points/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tree
+         * @description Every point under its primary parent, depth first, most important first. With a
+         *     workspace: its points and the topics above them.
+         */
+        get: operations["tree_api_points_tree_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -172,8 +271,13 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Set Importance */
-        patch: operations["set_importance_api_points__point_id__patch"];
+        /**
+         * Update Point
+         * @description Change importance, the primary parent (`parent_id`, null = top level) and the shortcuts.
+         *     A change that breaks a rule (a loop, more than 4 levels, more than 2 shortcuts) is refused
+         *     with 409 and nothing changes.
+         */
+        patch: operations["update_point_api_points__point_id__patch"];
         trace?: never;
     };
     "/api/points/{point_id}/merge": {
@@ -191,6 +295,47 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Issues
+         * @description Highest priority first. Issues of notes hidden by .learnovaignore are left out.
+         */
+        get: operations["list_issues_api_issues_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/issues/{issue_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change Status
+         * @description `fixed` or `dismissed` for an open issue, `open` to reopen one. A dismissed issue is not
+         *     raised again by later reviews. 409 if the issue's status doesn't allow the change.
+         */
+        patch: operations["change_status_api_issues__issue_id__patch"];
         trace?: never;
     };
     "/api/status": {
@@ -317,6 +462,24 @@ export interface components {
             /** Mastery After */
             mastery_after: number;
         };
+        /** AttemptOut */
+        AttemptOut: {
+            /** Question */
+            question: string;
+            /** Type */
+            type: string;
+            /** Answer */
+            answer: string;
+            /** Score */
+            score: number;
+            /** Feedback */
+            feedback: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** ChangeOut */
         ChangeOut: {
             /** Kind */
@@ -353,10 +516,66 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** ImportanceIn */
-        ImportanceIn: {
-            /** Importance */
-            importance: number;
+        /** IssueOut */
+        IssueOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "factual_error" | "unclear" | "missing";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "fixed" | "dismissed" | "obsolete";
+            /** Quote */
+            quote: string;
+            /** Topic */
+            topic: string;
+            /** Problem */
+            problem: string;
+            /** Workspace */
+            workspace: string | null;
+            /** Note Path */
+            note_path: string[];
+            point: components["schemas"]["PointRefOut"] | null;
+            /** Priority */
+            priority: number;
+            /** Url */
+            url: string | null;
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Closed At */
+            closed_at: string | null;
+            /** Closed By */
+            closed_by: string | null;
+        };
+        /** IssuePatchIn */
+        IssuePatchIn: {
+            /**
+             * Status
+             * @description fixed / dismissed for an open issue; open to reopen a fixed or dismissed one
+             * @enum {string}
+             */
+            status: "open" | "fixed" | "dismissed";
+        };
+        /** MeOut */
+        MeOut: {
+            /** Name */
+            name: string;
         };
         /** MergeIn */
         MergeIn: {
@@ -374,6 +593,114 @@ export interface components {
              * Format: uuid
              */
             removed: string;
+        };
+        /** NoteDetailOut */
+        NoteDetailOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Path */
+            path: string[];
+            /** Icon */
+            icon: string | null;
+            /** Notion Url */
+            notion_url: string;
+            /** Ignored */
+            ignored: boolean;
+            /** Points */
+            points: number;
+            /** Open Issues */
+            open_issues: number;
+            /**
+             * Last Edited
+             * Format: date-time
+             */
+            last_edited: string;
+            /** Reviewed */
+            reviewed: boolean;
+            /** Knowledge Points */
+            knowledge_points: components["schemas"]["PointOut"][];
+            /** Issues */
+            issues: components["schemas"]["IssueOut"][];
+        };
+        /** NoteOut */
+        NoteOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Path */
+            path: string[];
+            /** Icon */
+            icon: string | null;
+            /** Notion Url */
+            notion_url: string;
+            /** Ignored */
+            ignored: boolean;
+            /** Points */
+            points: number;
+            /** Open Issues */
+            open_issues: number;
+            /**
+             * Last Edited
+             * Format: date-time
+             */
+            last_edited: string;
+            /** Reviewed */
+            reviewed: boolean;
+        };
+        /** NoteRefOut */
+        NoteRefOut: {
+            /** Workspace */
+            workspace: string;
+            /** Path */
+            path: string[];
+            /** Notion Url */
+            notion_url: string;
+        };
+        /** PointDetailOut */
+        PointDetailOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Summary */
+            summary: string;
+            /** Importance */
+            importance: number;
+            /** Sources */
+            sources: components["schemas"]["SourceOut"][];
+            /** Mastery */
+            mastery: number | null;
+            /** Review Count */
+            review_count: number;
+            /** Last Reviewed */
+            last_reviewed: string | null;
+            /** Parent Id */
+            parent_id: string | null;
+            /** Shortcuts */
+            shortcuts: components["schemas"]["PointRefOut"][];
+            /** Paths */
+            paths: string[][];
+            topic: components["schemas"]["TopicOut"] | null;
+            /** Children */
+            children: components["schemas"]["PointRefOut"][];
+            /** Notes */
+            notes: components["schemas"]["NoteRefOut"][];
+            /** Attempts */
+            attempts: components["schemas"]["AttemptOut"][];
+            /** Issues */
+            issues: components["schemas"]["IssueOut"][];
         };
         /** PointOut */
         PointOut: {
@@ -396,6 +723,19 @@ export interface components {
             review_count: number;
             /** Last Reviewed */
             last_reviewed: string | null;
+        };
+        /**
+         * PointPatchIn
+         * @description Only the fields you send change. `parent_id: null` moves the point to the top level;
+         *     `shortcuts` replaces its shortcut parents (at most 2).
+         */
+        PointPatchIn: {
+            /** Importance */
+            importance?: number | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Shortcuts */
+            shortcuts?: string[] | null;
         };
         /** PointRefOut */
         PointRefOut: {
@@ -645,6 +985,51 @@ export interface components {
              */
             ignored: string[][];
         };
+        /** TopicOut */
+        TopicOut: {
+            /** Mastery */
+            mastery: number | null;
+            /** Quizzed */
+            quizzed: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * TreePointOut
+         * @description One row of the knowledge tree, in tree order (depth first).
+         */
+        TreePointOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Summary */
+            summary: string;
+            /** Importance */
+            importance: number;
+            /** Level */
+            level: number;
+            /** Parent Id */
+            parent_id: string | null;
+            /** Shortcuts */
+            shortcuts: string[];
+            /** Path */
+            path: string[];
+            topic: components["schemas"]["TopicOut"] | null;
+            /** Mastery */
+            mastery: number | null;
+            /** Review Count */
+            review_count: number;
+            /** Last Reviewed */
+            last_reviewed: string | null;
+            /** Open Issues */
+            open_issues: number;
+            /** Sources */
+            sources: components["schemas"]["SourceOut"][];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -663,6 +1048,30 @@ export interface components {
             point: components["schemas"]["PointOut"];
             /** Weight */
             weight: number;
+        };
+        /** WebImportOut */
+        WebImportOut: {
+            /** Index Url */
+            index_url: string;
+            /** Notion Url */
+            notion_url: string;
+            /** Folder */
+            folder: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Imported */
+            imported: number;
+            /** New */
+            new: number;
+            /** Removed */
+            removed: number;
+            /** Last Checked */
+            last_checked: string | null;
         };
         /** WorkspaceIn */
         WorkspaceIn: {
@@ -971,6 +1380,109 @@ export interface operations {
             };
         };
     };
+    list_notes_api_workspaces__name__notes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_note_api_workspaces__name__notes__note_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                note_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_web_imports_api_web_imports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebImportOut"][];
+                };
+            };
+        };
+    };
+    me_api_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
     list_points_api_points_get: {
         parameters: {
             query?: {
@@ -1002,6 +1514,37 @@ export interface operations {
             };
         };
     };
+    tree_api_points_tree_get: {
+        parameters: {
+            query?: {
+                workspace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TreePointOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_point_api_points__point_id__get: {
         parameters: {
             query?: never;
@@ -1019,7 +1562,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PointOut"];
+                    "application/json": components["schemas"]["PointDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -1033,7 +1576,7 @@ export interface operations {
             };
         };
     };
-    set_importance_api_points__point_id__patch: {
+    update_point_api_points__point_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -1044,7 +1587,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ImportanceIn"];
+                "application/json": components["schemas"]["PointPatchIn"];
             };
         };
         responses: {
@@ -1054,7 +1597,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PointOut"];
+                    "application/json": components["schemas"]["PointDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -1090,6 +1633,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MergeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_issues_api_issues_get: {
+        parameters: {
+            query?: {
+                workspace?: string | null;
+                status?: "open" | "fixed" | "dismissed" | "obsolete" | "all";
+                kind?: ("factual_error" | "unclear" | "missing") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_status_api_issues__issue_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssuePatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueOut"];
                 };
             };
             /** @description Validation Error */

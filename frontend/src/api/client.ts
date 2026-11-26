@@ -7,6 +7,15 @@ export type Workspace = S["WorkspaceOut"];
 export type Status = S["StatusOut"];
 export type Summary = S["SummaryOut"];
 export type Point = S["PointOut"];
+export type TreePoint = S["TreePointOut"];
+export type PointDetail = S["PointDetailOut"];
+export type PointPatch = S["PointPatchIn"];
+export type Issue = S["IssueOut"];
+export type IssueStatus = Issue["status"];
+export type IssueKind = Issue["kind"];
+export type Note = S["NoteOut"];
+export type NoteDetail = S["NoteDetailOut"];
+export type WebImport = S["WebImportOut"];
 export type ReportFile = S["ReportFileOut"];
 export type Report = S["ReportOut"];
 export type SyncResult = S["SyncOut"];
@@ -63,12 +72,23 @@ function query(params: Record<string, string | number | null | undefined>): stri
 const ws = (name: string) => `/api/workspaces/${encodeURIComponent(name)}`;
 
 export const api = {
+  me: () => request<{ name: string }>("GET", "/api/me"),
   workspaces: () => request<Workspace[]>("GET", "/api/workspaces"),
   status: (workspace: string | null, weakest = 10) =>
     request<Status>("GET", `/api/status${query({ workspace, weakest })}`),
   points: (workspace: string | null) => request<Point[]>("GET", `/api/points${query({ workspace })}`),
-  setImportance: (id: string, importance: number) =>
-    request<Point>("PATCH", `/api/points/${id}`, { importance }),
+  tree: (workspace: string | null) =>
+    request<TreePoint[]>("GET", `/api/points/tree${query({ workspace })}`),
+  point: (id: string) => request<PointDetail>("GET", `/api/points/${id}`),
+  updatePoint: (id: string, patch: PointPatch) =>
+    request<PointDetail>("PATCH", `/api/points/${id}`, patch),
+  issues: (filters: { workspace?: string | null; status?: IssueStatus | "all"; kind?: IssueKind | null }) =>
+    request<Issue[]>("GET", `/api/issues${query(filters)}`),
+  setIssueStatus: (id: string, status: "open" | "fixed" | "dismissed") =>
+    request<Issue>("PATCH", `/api/issues/${id}`, { status }),
+  notes: (workspace: string) => request<Note[]>("GET", `${ws(workspace)}/notes`),
+  note: (workspace: string, id: string) => request<NoteDetail>("GET", `${ws(workspace)}/notes/${id}`),
+  webImports: () => request<WebImport[]>("GET", "/api/web-imports"),
   reports: (workspace: string) => request<ReportFile[]>("GET", `${ws(workspace)}/reports`),
   report: (workspace: string, name: string) =>
     request<Report>("GET", `${ws(workspace)}/reports/${encodeURIComponent(name)}`),

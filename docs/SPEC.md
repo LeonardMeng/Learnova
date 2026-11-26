@@ -347,9 +347,13 @@ topic keeps its children.
   topic mastery, open-issue count); `GET /points/{id}` (summary, all paths, source notes with
   Notion links, last 20 attempts, issues); `PATCH /points/{id}` extended with primary parent and
   shortcuts; `GET /issues?workspace=&status=&kind=`; `PATCH /issues/{id}` (status).
-- **Navigation.** Knowledge · Quiz · Issues. `/` opens Knowledge. Status is merged into Knowledge:
-  its summary numbers become the stat strip, "weakest" becomes sorting by mastery, and `/status`
-  redirects to Knowledge.
+- **Navigation** (agreed 2026-11-26, replaces "Knowledge · Quiz · Issues"). A sidebar with search
+  and three groups: **Knowledge** (Overview = this page, All points = the flat view),
+  **Workspaces** (Quiz, History "coming soon", Issues, Sync & review, one Notion page tree per
+  workspace with the pages' icons, Web imports) and **Reports** (All issues in every status, with
+  the report files below). Opened pages show as tabs. `/` opens Knowledge. Status is merged into
+  Knowledge: its summary numbers become the stat strip, "weakest" becomes sorting by mastery, and
+  `/status` redirects to Knowledge.
 - **Knowledge page.**
   - Stat strip: points, average mastery, open issues, last quiz.
   - Search box: filters the tree as you type, keeping matches and their parent path; each result

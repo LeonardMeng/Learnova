@@ -41,6 +41,7 @@ class NoteSummary(BaseModel):
     path: tuple[str, ...]  # titles from the workspace's top page down to this note, inclusive
     last_edited: datetime
     parent_id: str | None = None  # source_id of the note this one sits under; None for the top
+    icon: str | None = None  # the page's emoji, or an image URL; None = no icon
 
 
 class Note(BaseModel):
@@ -56,6 +57,7 @@ class Note(BaseModel):
     synced_at: datetime
     reviewed_hash: str | None = None  # content_hash at the last review; None = never reviewed
     issues_hash: str | None = None  # content_hash when its issues were last updated; None = never
+    icon: str | None = None  # the Notion page's emoji or icon URL
     ignored: bool = False  # hidden by .learnovaignore: kept, but not reviewed or quizzed
 
 

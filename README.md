@@ -321,15 +321,29 @@ curl http://127.0.0.1:8000/api/status
 
 ## Web app
 
-A browser interface on top of the API, in `frontend/` (React + Vite + TypeScript). Pages:
+A browser interface on top of the API, in `frontend/` (React + Vite + TypeScript). A sidebar
+(with a search box for points) opens the pages; each page you open gets a tab above the page,
+and the tabs are remembered in the browser.
 
-- **Quiz**: short answer, multiple choice or true/false; answer with the keyboard (A–D, T/F,
-  Ctrl/⌘+Enter); a reload continues the current question.
-- **Status**: totals per workspace, your weakest points, and every point with its mastery;
-  importance can be changed in place.
-- **Reports**: read review reports, and run Sync and Review for the workspace.
+- **Knowledge › Overview** (the first page): points, average mastery, open issues and last quiz;
+  the tree of points (topics open and close; ↗ shortcuts jump to the point's own place); and the
+  selected point's details: where it lives, its notes, open issues, quiz answers with a score
+  trend, and controls for importance, "Move to…" and shortcuts. The sidebar search filters the
+  points and shows where each one lives and "also in: …".
+- **Knowledge › All points**: one list, sortable by mastery, importance, last quiz or issues.
+- **Workspaces › Quiz**: short answer, multiple choice or true/false; answer with the keyboard
+  (A–D, T/F, Ctrl/⌘+Enter); a reload continues the current question.
+- **Workspaces › History**: coming soon.
+- **Workspaces › Issues**: open issues by priority, with a Notion link, Fix and Dismiss.
+- **Workspaces › Sync & review**: the Sync and Review buttons for a workspace.
+- **Workspaces › one entry per workspace**: its Notion page tree with the pages' icons; a page
+  shows its knowledge points and issues.
+- **Workspaces › Web imports**: the sites imported with `learnova web import`.
+- **Reports › All issues**: every issue in any status (Reopen a fixed or dismissed one), and the
+  workspace's report files below.
 
-The workspace picker in the header applies to every page.
+Pages with a workspace picker show one workspace or all of them; the choice is kept in the URL.
+Page icons appear after the next `learnova sync`.
 
 One-time setup (needs Node 20+):
 

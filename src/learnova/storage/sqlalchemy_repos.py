@@ -99,6 +99,7 @@ def _note(row: NoteRow) -> Note:
         synced_at=row.synced_at,
         reviewed_hash=row.reviewed_hash,
         issues_hash=row.issues_hash,
+        icon=row.icon,
         ignored=row.ignored,
     )
 
@@ -241,6 +242,7 @@ class SqlNoteRepository(NoteRepository):
             row.content_hash = content_hash
             row.synced_at = synced_at
             row.ignored = False  # listed by the source, so not ignored
+            row.icon = summary.icon
             s.flush()
             return _note(row)
 
@@ -306,6 +308,12 @@ class SqlNoteRepository(NoteRepository):
             row = s.get(NoteRow, note_id)
             if row is not None:
                 row.reviewed_hash = content_hash
+
+    def set_icon(self, note_id, icon) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(NoteRow, note_id)
+            if row is not None:
+                row.icon = icon
 
     def mark_issues_reviewed(self, note_id, content_hash) -> None:
         with self._sessions.begin() as s:

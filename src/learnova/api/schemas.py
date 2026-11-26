@@ -129,6 +129,66 @@ class ImportanceIn(BaseModel):
     importance: int = Field(ge=1, le=5)
 
 
+class PointPatchIn(BaseModel):
+    """Only the fields you send change. `parent_id: null` moves the point to the top level;
+    `shortcuts` replaces its shortcut parents (at most 2)."""
+
+    importance: int | None = Field(default=None, ge=1, le=5)
+    parent_id: uuid.UUID | None = None
+    shortcuts: list[uuid.UUID] | None = None
+
+
+class TopicOut(BaseModel):
+    mastery: float | None  # importance-weighted, of the quizzed points under it
+    quizzed: int
+    total: int
+
+
+class TreePointOut(BaseModel):
+    """One row of the knowledge tree, in tree order (depth first)."""
+
+    id: uuid.UUID
+    name: str
+    summary: str
+    importance: int
+    level: int  # 0 = top level
+    parent_id: uuid.UUID | None  # primary parent
+    shortcuts: list[uuid.UUID]  # the other parents it also appears under
+    path: list[str]  # names from the top level down to this point
+    topic: TopicOut | None  # set when other points are under it
+    mastery: float | None
+    review_count: int
+    last_reviewed: datetime | None
+    open_issues: int
+    sources: list[SourceOut]
+
+
+class AttemptOut(BaseModel):
+    question: str
+    type: str
+    answer: str
+    score: float
+    feedback: str
+    created_at: datetime
+
+
+class NoteRefOut(BaseModel):
+    workspace: str
+    path: list[str]
+    notion_url: str
+
+
+class PointDetailOut(PointOut):
+    parent_id: uuid.UUID | None
+    shortcuts: list[PointRefOut]
+    paths: list[list[str]]  # the primary path first, then one per shortcut
+    topic: TopicOut | None
+    children: list[PointRefOut]
+    notes: list[NoteRefOut]
+    attempts: list[AttemptOut]  # newest first, at most 20
+    issues: list[IssueOut]  # open ones first
+
+
 class MergeIn(BaseModel):
     into: uuid.UUID
 
@@ -193,6 +253,72 @@ class PointRefOut(BaseModel):
     name: str
 
 
+# --- issues --------------------------------------------------------------------------------
+
+IssueStatusName = Literal["open", "fixed", "dismissed", "obsolete"]
+
+
+class IssueOut(BaseModel):
+    id: uuid.UUID
+    kind: Literal["factual_error", "unclear", "missing"]
+    status: IssueStatusName
+    quote: str
+    topic: str
+    problem: str
+    workspace: str | None
+    note_path: list[str]
+    point: PointRefOut | None
+    priority: float
+    url: str | None  # Notion, at the quoted paragraph when known
+    first_seen: datetime
+    last_seen: datetime
+    closed_at: datetime | None
+    closed_by: str | None
+
+
+class IssuePatchIn(BaseModel):
+    status: Literal["open", "fixed", "dismissed"] = Field(
+        description="fixed / dismissed for an open issue; open to reopen a fixed or dismissed one"
+    )
+
+
+# --- notes and web imports -----------------------------------------------------------------
+
+
+class NoteOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    path: list[str]
+    icon: str | None  # emoji or image URL
+    notion_url: str
+    ignored: bool
+    points: int
+    open_issues: int
+    last_edited: datetime
+    reviewed: bool  # reviewed since its last change
+
+
+class NoteDetailOut(NoteOut):
+    knowledge_points: list[PointOut]
+    issues: list[IssueOut]  # every status, open first
+
+
+class WebImportOut(BaseModel):
+    index_url: str
+    notion_url: str
+    folder: str
+    created_at: datetime
+    completed_at: datetime | None
+    imported: int
+    new: int
+    removed: int
+    last_checked: datetime | None
+
+
+class MeOut(BaseModel):
+    name: str
+
+
 class AnswerOut(BaseModel):
     question_id: uuid.UUID
     point: PointRefOut
@@ -210,3 +336,6 @@ class AnswerOut(BaseModel):
 class SkippedOut(BaseModel):
     question_id: uuid.UUID
     status: Literal["skipped"]
+
+
+PointDetailOut.model_rebuild()

@@ -1,16 +1,14 @@
+// Workspaces › Sync & review: the workspaces, and the Sync and Review buttons for one of them.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import Markdown from "react-markdown";
-import { useSearchParams } from "react-router";
-import remarkGfm from "remark-gfm";
+import { Link } from "react-router";
 import { api, type ReviewResult, type SyncResult } from "../api/client";
-import { ErrorBox, Spinner, when } from "../components/ui";
+import { ErrorBox, Spinner, WorkspacePicker } from "../components/ui";
 import { useWorkspace } from "../workspace";
 
-export function ReportsPage() {
+export function SyncPage() {
   const [picked] = useWorkspace();
   const workspaces = useQuery({ queryKey: ["workspaces"], queryFn: api.workspaces });
-  // Reports belong to one workspace: with "All" selected, use the default one.
   const name = picked ?? workspaces.data?.find((w) => w.is_default)?.name ?? workspaces.data?.[0]?.name ?? null;
 
   if (workspaces.isPending) return <Spinner label="Loading…" />;
@@ -18,48 +16,54 @@ export function ReportsPage() {
   if (!name) {
     return (
       <section className="card">
-        <h1>Reports</h1>
+        <h1>Sync &amp; review</h1>
         <p>No workspaces yet. Create one with <code>learnova workspace new</code>.</p>
       </section>
     );
   }
-  return <WorkspaceReports key={name} workspace={name} />;
-}
-
-function WorkspaceReports({ workspace }: { workspace: string }) {
-  const [params, setParams] = useSearchParams();
-  const queryClient = useQueryClient();
-  const reports = useQuery({ queryKey: ["reports", workspace], queryFn: () => api.reports(workspace) });
-  const selected = params.get("report") ?? reports.data?.[0]?.name ?? null;
-  const report = useQuery({
-    queryKey: ["report", workspace, selected],
-    queryFn: () => api.report(workspace, selected!),
-    enabled: selected !== null,
-  });
-  const select = (report: string) =>
-    setParams((prev) => {
-      const p = new URLSearchParams(prev);
-      p.set("report", report);
-      return p;
-    });
-
-  const [fullSync, setFullSync] = useState(false);
-  const [reviewAll, setReviewAll] = useState(false);
-  const sync = useMutation({ mutationFn: () => api.sync(workspace, fullSync) });
-  const review = useMutation({
-    mutationFn: () => api.review(workspace, reviewAll),
-    onSuccess: (r) => {
-      queryClient.invalidateQueries({ queryKey: ["reports", workspace] });
-      queryClient.invalidateQueries({ queryKey: ["points"] });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
-      if (r.report) select(r.report);
-    },
-  });
-  const running = sync.isPending || review.isPending;
-
   return (
     <section>
-      <h1>Reports: {workspace}</h1>
+      <div className="page-head">
+        <h1>Sync &amp; review: {name}</h1>
+        <WorkspacePicker allowAll={false} />
+      </div>
+      <Actions key={name} workspace={name} />
+      <div className="card">
+        <h2>Workspaces</h2>
+        <table>
+          <thead><tr><th>Name</th><th>Folder</th><th /></tr></thead>
+          <tbody>
+            {workspaces.data.map((w) => (
+              <tr key={w.name}>
+                <td>
+                  <Link to={`/workspaces/${encodeURIComponent(w.name)}`}>{w.name}</Link>
+                  {w.is_default && <span className="muted"> (default)</span>}
+                </td>
+                <td className="muted">{w.path}{w.found ? "" : " (not found)"}</td>
+                <td><Link to={`/sync?workspace=${encodeURIComponent(w.name)}`}>sync / review</Link></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function Actions({ workspace }: { workspace: string }) {
+  const queryClient = useQueryClient();
+  const [fullSync, setFullSync] = useState(false);
+  const [reviewAll, setReviewAll] = useState(false);
+  const refresh = () => {
+    for (const key of ["reports", "points", "tree", "status", "issues", "notes", "point"]) {
+      queryClient.invalidateQueries({ queryKey: [key] });
+    }
+  };
+  const sync = useMutation({ mutationFn: () => api.sync(workspace, fullSync), onSuccess: refresh });
+  const review = useMutation({ mutationFn: () => api.review(workspace, reviewAll), onSuccess: refresh });
+  const running = sync.isPending || review.isPending;
+  return (
+    <>
       <div className="card toolbar">
         <button disabled={running} onClick={() => sync.mutate()}>Sync from Notion</button>
         <label className="check"><input type="checkbox" checked={fullSync} onChange={(e) => setFullSync(e.target.checked)} /> re-download all</label>
@@ -71,36 +75,8 @@ function WorkspaceReports({ workspace }: { workspace: string }) {
       {sync.isError && <ErrorBox error={sync.error} />}
       {review.isError && <ErrorBox error={review.error} />}
       {sync.data && <SyncSummary result={sync.data} />}
-      {review.data && <ReviewSummary result={review.data} />}
-
-      <div className="reports">
-        <aside className="card report-list">
-          <h2>Reports</h2>
-          {reports.isPending && <Spinner label="Loading…" />}
-          {reports.isError && <ErrorBox error={reports.error} onRetry={() => reports.refetch()} />}
-          {reports.data?.length === 0 && <p className="muted">No reports yet. Run a review.</p>}
-          <ul>
-            {reports.data?.map((r) => (
-              <li key={r.name}>
-                <button className={`link ${r.name === selected ? "active" : ""}`} onClick={() => select(r.name)}>
-                  {r.name.replace(/\.md$/, "")}
-                </button>
-                <span className="muted">{when(r.modified)}</span>
-              </li>
-            ))}
-          </ul>
-        </aside>
-        <article className="card report">
-          {report.isPending && selected && <Spinner label="Loading…" />}
-          {report.isError && <ErrorBox error={report.error} />}
-          {report.data && (
-            <div className="markdown">
-              <Markdown remarkPlugins={[remarkGfm]}>{report.data.markdown}</Markdown>
-            </div>
-          )}
-        </article>
-      </div>
-    </section>
+      {review.data && <ReviewSummary workspace={workspace} result={review.data} />}
+    </>
   );
 }
 
@@ -137,7 +113,7 @@ function SyncSummary({ result }: { result: SyncResult }) {
   );
 }
 
-function ReviewSummary({ result }: { result: ReviewResult }) {
+function ReviewSummary({ workspace, result }: { workspace: string; result: ReviewResult }) {
   if (result.nothing_to_review) {
     return <div className="card notice">Nothing to review: no note changed since its last review. Sync first, or tick “all notes”.</div>;
   }
@@ -145,7 +121,8 @@ function ReviewSummary({ result }: { result: ReviewResult }) {
     <div className="card notice">
       <strong>Reviewed {result.reviewed} note(s).</strong> {result.new_points} new point(s),{" "}
       {result.issues + result.missing_topics} new issue(s), {result.fixed} fixed, {result.open} open
-      {result.possible_duplicates > 0 && <>, {result.possible_duplicates} possible duplicate(s)</>}.
+      {result.possible_duplicates > 0 && <>, {result.possible_duplicates} possible duplicate(s)</>}.{" "}
+      {result.report && <Link to={`/reports?workspace=${encodeURIComponent(workspace)}&report=${encodeURIComponent(result.report)}`}>Open the report</Link>}
       {result.failed.length > 0 && <p className="bad">{result.failed.length} note(s) failed and will be retried.</p>}
     </div>
   );
