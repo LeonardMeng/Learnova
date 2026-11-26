@@ -74,7 +74,10 @@ def list_issues(
     table.add_column("Problem", overflow="fold", max_width=50)
     for r in ranked:
         i = r.issue
-        row = [str(i.id)[:8], f"{r.priority:.1f}", KIND_SHORT[i.kind]]
+        short = str(i.id)[:8]
+        # A clickable link to the paragraph in Notion, in terminals that support links.
+        row = [f"[link={r.url}]{short}[/link]" if r.url else short, f"{r.priority:.1f}",
+               KIND_SHORT[i.kind]]  # fmt: skip
         if status != StatusFilter.open:
             row.append(i.status.value)
         row += [

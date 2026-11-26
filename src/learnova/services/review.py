@@ -18,6 +18,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from learnova.anchors import DEFAULT_THRESHOLD, find_block
 from learnova.llm import factory, prompts
 from learnova.models import (
     IssueKind,
@@ -28,7 +29,7 @@ from learnova.models import (
     ReviewIssue,
     Workspace,
 )
-from learnova.services.issues import fingerprint
+from learnova.services.issues import fingerprint, is_same_issue
 from learnova.storage.database import Repositories
 from learnova.sync import CACHE_DIR, cache_filename
 
@@ -144,6 +145,9 @@ class NoteResult:
     fixed_issues: list[ReviewIssue] = field(default_factory=list)
     still_open: list[ReviewIssue] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    issues_kept: bool = (
+        False  # note unchanged since its issues were last reviewed: left as they were
+    )
 
 
 @dataclass
@@ -170,6 +174,7 @@ def review_notes(
     reviewer: Reviewer,
     deduper: Deduper,
     on_note: Callable[[Note, str], None] | None = None,
+    anchor_threshold: float = DEFAULT_THRESHOLD,
 ) -> ReviewRun:
     run = ReviewRun(workspace)
     user = repos.users.get_or_create_local()
@@ -183,7 +188,9 @@ def review_notes(
             _report(on_note, note, "skipped (no content)")
             continue
         try:
-            result = _review_one(repos, user.id, note, markdown, titles, reviewer, deduper)
+            result = _review_one(
+                repos, user.id, note, markdown, titles, reviewer, deduper, anchor_threshold
+            )
         except factory.LLMCallError as e:
             run.failed.append((note, str(e)))
             _report(on_note, note, "failed")
@@ -194,7 +201,9 @@ def review_notes(
     return run
 
 
-def _review_one(repos, user_id, note, markdown, titles, reviewer, deduper) -> NoteResult:
+def _review_one(
+    repos, user_id, note, markdown, titles, reviewer, deduper, anchor_threshold
+) -> NoteResult:
     existing = {f"P{i}": p for i, p in enumerate(repos.knowledge.list_for_note(note.id), 1)}
     others = [t for t in titles if t != " / ".join(note.path)]
     open_issues = {
@@ -280,12 +289,36 @@ def _review_one(repos, user_id, note, markdown, titles, reviewer, deduper) -> No
             PointOutcome(Status.NEW, point, possible_duplicate=matches.get(new_ref))
         )
 
-    _update_issues(repos, user_id, note, review, open_issues, dismissed, by_label, result)
+    blocks = repos.notes.blocks(note.id)
+    if note.issues_hash is not None and note.issues_hash == note.content_hash:
+        # The text hasn't changed since its issues were last reviewed, so whatever the model says
+        # about issues now would only be noise: keep them as they are, just re-link their blocks.
+        result.issues_kept = True
+        result.still_open = list(open_issues.values())
+        _reanchor(repos, result.still_open, blocks, anchor_threshold)
+    else:
+        _update_issues(repos, user_id, note, review, open_issues, dismissed, by_label, result,
+                       blocks, anchor_threshold)  # fmt: skip
+        repos.notes.mark_issues_reviewed(note.id, note.content_hash)
     return result
 
 
-def _update_issues(repos, user_id, note, review, open_issues, dismissed, by_label, result) -> None:
-    """Close the issues the model saw fixed, keep the rest open, and add genuinely new ones."""
+def _reanchor(repos, issues, blocks, threshold) -> None:
+    """Link each open issue with a quote to the block it comes from, if that link is missing or
+    points to a block that no longer exists."""
+    block_ids = {b.block_id for b in blocks}
+    for issue in issues:
+        if issue.quote and issue.block_id not in block_ids:  # older issue, or block replaced
+            block = find_block(issue.quote, blocks, threshold)
+            if block != issue.block_id:
+                repos.issues.set_block(issue.id, block)
+
+
+def _update_issues(
+    repos, user_id, note, review, open_issues, dismissed, by_label, result, blocks, threshold
+) -> None:
+    """Close the issues the model saw fixed, keep the rest open, and add genuinely new ones.
+    Every open issue with a quote is linked to the block it comes from, when one matches."""
     now = datetime.now(UTC)
     verdicts: dict[str, str] = {}
     for check in review.issue_status:
@@ -299,13 +332,14 @@ def _update_issues(repos, user_id, note, review, open_issues, dismissed, by_labe
             )
         else:  # still present, or not mentioned: an issue is only closed on a clear "fixed"
             still.append(issue)
+    _reanchor(repos, still, blocks, threshold)
     unmentioned = sum(1 for ref in open_issues if ref not in verdicts)
     if unmentioned:
         result.warnings.append(f"{unmentioned} open issue(s) not mentioned; kept open.")
 
-    # Never raise an issue that is already open or that you dismissed (the model is told so;
-    # this is the safety net).
-    known = {x.fingerprint: x for x in [*still, *dismissed.values()]}
+    # Never raise an issue that is already open or that you dismissed, even reworded (the model
+    # is told so; this is the safety net). Issues added earlier in this run count too.
+    known = [*still, *dismissed.values()]
     reseen = {x.id for x in still}
     found = [
         (IssueKind(i.kind), i.quote.strip(), "", i.problem.strip(), i.point) for i in review.issues
@@ -314,16 +348,20 @@ def _update_issues(repos, user_id, note, review, open_issues, dismissed, by_labe
         if not (quote or topic) or not problem:
             continue
         fp = fingerprint(kind, quote, topic)
-        if fp in known:
-            if known[fp].status == IssueStatus.OPEN:
-                reseen.add(known[fp].id)
+        block = find_block(quote, blocks, threshold) if quote else None
+        same = next((x for x in known if x.fingerprint == fp), None) or next(
+            (x for x in known if is_same_issue(kind, quote, topic, block, x)), None
+        )
+        if same is not None:
+            if same.status == IssueStatus.OPEN:
+                reseen.add(same.id)
             continue
         point = by_label.get(label or "")
         issue = repos.issues.create(
             user_id, note.workspace_id, note.id, note.path, kind, quote, topic, problem,
-            point.id if point else None, fp, now,
+            point.id if point else None, fp, now, block,
         )  # fmt: skip
-        known[fp] = issue
+        known.append(issue)
         result.new_issues.append(issue)
     repos.issues.seen(list(reseen), now)
     result.still_open = still
@@ -463,11 +501,13 @@ def run_review(
     pending = len(pending_images(repos, workspace))
     if on_start:
         on_start(len(notes), settings.main, pending)
+    full_settings = load_settings()
     run = review_notes(
-        workspace, repos, notes, llm_reviewer(model), llm_deduper(model), on_note=on_note
-    )
+        workspace, repos, notes, llm_reviewer(model), llm_deduper(model), on_note=on_note,
+        anchor_threshold=full_settings.anchor_threshold,
+    )  # fmt: skip
     user = repos.users.get_or_create_local()
-    open_issues = issues_service.ranked(repos, load_settings().issues, workspace.id)
+    open_issues = issues_service.ranked(repos, full_settings.issues, workspace.id)
     path = write_review_report(
         run, settings.main, repos.knowledge.list_for_user(user.id), open_issues
     )

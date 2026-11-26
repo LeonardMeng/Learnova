@@ -8,7 +8,9 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from difflib import SequenceMatcher
 
+from learnova.anchors import notion_url
 from learnova.errors import ConflictError, LearnovaError, NotFoundError
 from learnova.models import IssueKind, IssueStatus, KnowledgePoint, Mastery, ReviewIssue
 from learnova.scheduler.priority import IssueWeights, priority
@@ -40,12 +42,42 @@ def fingerprint(kind: str, quote: str = "", topic: str = "") -> str:
     return f"{kind}:{digest}"
 
 
+SAME_ISSUE_SIMILARITY = 0.8  # quotes (or `missing` topics) at least this similar are one issue
+MIN_FUZZY_WORDS = 3  # shorter quotes only match exactly ("passage 1" is not "passage 2")
+
+
+def is_same_issue(
+    kind: str, quote: str, topic: str, block_id: str | None, existing: ReviewIssue
+) -> bool:
+    """Whether a newly found issue is really `existing` again, worded a little differently.
+
+    Same kind, and one of: one quote contains the other; the quotes (or, for `missing`, the
+    topics) are at least SAME_ISSUE_SIMILARITY alike; both are anchored to the same block.
+    The first two need quotes of at least MIN_FUZZY_WORDS words."""
+    if kind != existing.kind:
+        return False
+    if kind == IssueKind.MISSING:
+        a, b = _normal(topic), _normal(existing.topic)
+        return bool(a and b) and SequenceMatcher(None, a, b).ratio() >= SAME_ISSUE_SIMILARITY
+    a, b = _normal(quote), _normal(existing.quote)
+    if not a or not b:
+        return False
+    shorter, longer = sorted((a, b), key=len)
+    if len(shorter.split()) >= MIN_FUZZY_WORDS and (
+        f" {shorter} " in f" {longer} "
+        or SequenceMatcher(None, a, b).ratio() >= SAME_ISSUE_SIMILARITY
+    ):
+        return True
+    return block_id is not None and block_id == existing.block_id
+
+
 @dataclass(frozen=True)
 class RankedIssue:
     issue: ReviewIssue
     priority: float
     point: KnowledgePoint | None
     mastery: Mastery | None
+    url: str | None = None  # Notion, at the quoted block when known; None for obsolete issues
 
 
 def ranked(
@@ -60,6 +92,10 @@ def ranked(
     issues = repos.issues.list(user.id, workspace_id, statuses or [IssueStatus.OPEN], kinds)
     mastery = repos.attempts.mastery(user.id)
     points = {p.id: p for p in repos.knowledge.list_for_user(user.id)}
+    pages = {}  # note id -> Notion page id
+    for ws in repos.workspaces.list(user.id):
+        if workspace_id is None or ws.id == workspace_id:
+            pages.update({n.id: n.source_id for n in repos.notes.list(ws.id)})
     out = []
     for issue in issues:
         point = points.get(issue.point_id) if issue.point_id else None
@@ -67,7 +103,9 @@ def ranked(
         value = priority(
             issue.kind, point.importance if point else None, m.mastery if m else None, weights
         )
-        out.append(RankedIssue(issue, value, point, m))
+        page = pages.get(issue.note_id) if issue.note_id else None
+        url = notion_url(page, issue.block_id) if page else None
+        out.append(RankedIssue(issue, value, point, m, url))
     return sorted(out, key=lambda r: (-r.priority, r.issue.first_seen))
 
 

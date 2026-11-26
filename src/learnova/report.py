@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from learnova.anchors import notion_url
 from learnova.errors import NotFoundError
 from learnova.models import IssueKind, KnowledgePoint, Workspace
 from learnova.services.issues import RankedIssue
@@ -122,6 +123,12 @@ def render_review(
         f"{count(Status.REMOVED)} removed"
         + (f" · {len(dups)} possible duplicate(s)" if dups else ""),
     ]
+    kept = [" / ".join(r.note.path) for r in run.reviewed if r.issues_kept]
+    if kept:
+        out.append(
+            f"- Issues left as they were for {len(kept)} note(s) unchanged since their last "
+            f"issue review: {', '.join(kept)}"
+        )
     for result in run.reviewed:
         out += [f"- ⚠ {' / '.join(result.note.path)}: {w}" for w in result.warnings]
     if run.failed:
@@ -143,6 +150,7 @@ def render_review(
         out.append(
             f"- **{KIND_LABEL[issue.kind]}** in {' / '.join(note.path)}: "
             f"{_one_line(issue.quote or issue.topic)} `{str(issue.id)[:8]}`"
+            f" · [Open in Notion]({notion_url(note.source_id, issue.block_id)})"
         )
 
     if rest:
@@ -177,9 +185,10 @@ def _issue_entry(
         mastery = f"{r.mastery.mastery:.2f}" if r.mastery else "not quizzed"
         about = f" · {r.point.name} (importance {r.point.importance}, mastery {mastery})"
     new = " · new" if issue.id in new_ids else ""
+    link = f" · [Open in Notion]({r.url})" if r.url else ""
     head = (
         f"{bullet} **{KIND_LABEL[issue.kind]}**{where_} · priority {r.priority:.1f}{about}{new}"
-        f" · `{str(issue.id)[:8]}`"
+        f" · `{str(issue.id)[:8]}`{link}"
     )
     body = (
         f"   **{_one_line(issue.topic)}**: {issue.problem.strip()}"

@@ -55,6 +55,7 @@ class Note(BaseModel):
     content_hash: str
     synced_at: datetime
     reviewed_hash: str | None = None  # content_hash at the last review; None = never reviewed
+    issues_hash: str | None = None  # content_hash when its issues were last updated; None = never
     ignored: bool = False  # hidden by .learnovaignore: kept, but not reviewed or quizzed
 
 
@@ -69,11 +70,23 @@ class ImageRef(BaseModel):
     caption: str = ""
 
 
+class BlockText(BaseModel):
+    """The plain text of one block of a note, in reading order: what issue quotes are matched to,
+    so an issue can link to its paragraph in Notion."""
+
+    model_config = ConfigDict(frozen=True)
+
+    block_id: str
+    type: str  # Notion block type, e.g. "paragraph", "bulleted_list_item"
+    text: str
+
+
 class NoteContent(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     markdown: str  # images appear as <!-- image:BLOCK_ID --> placeholders
     images: tuple[ImageRef, ...] = ()
+    blocks: tuple[BlockText, ...] = ()
 
 
 class NoteImage(BaseModel):
@@ -260,3 +273,4 @@ class ReviewIssue(BaseModel):
     last_seen: datetime
     closed_at: datetime | None
     closed_by: str | None  # "review", "user" or "notion"
+    block_id: str | None = None  # the Notion block the quote was found in, if any

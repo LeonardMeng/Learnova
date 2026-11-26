@@ -4,6 +4,7 @@ converts rows to domain models before returning."""
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from learnova.models import (
     Attempt,
+    BlockText,
     ImageRef,
     IssuedQuestion,
     IssuedStatus,
@@ -53,6 +55,7 @@ from learnova.storage.tables import (
     KnowledgePointRow,
     KpSourceRow,
     MasteryRow,
+    NoteBlockRow,
     NoteImageRow,
     NoteRow,
     ReviewIssueRow,
@@ -93,6 +96,7 @@ def _note(row: NoteRow) -> Note:
         content_hash=row.content_hash,
         synced_at=row.synced_at,
         reviewed_hash=row.reviewed_hash,
+        issues_hash=row.issues_hash,
         ignored=row.ignored,
     )
 
@@ -265,6 +269,30 @@ class SqlNoteRepository(NoteRepository):
                 )
                 s.delete(row)
 
+    def replace_blocks(self, note_id, blocks) -> None:
+        with self._sessions.begin() as s:
+            s.execute(delete(NoteBlockRow).where(NoteBlockRow.note_id == note_id))
+            for position, block in enumerate(blocks):
+                s.add(
+                    NoteBlockRow(
+                        note_id=note_id,
+                        block_id=block.block_id,
+                        position=position,
+                        block_type=block.type,
+                        text=block.text,
+                        text_hash=hashlib.sha256(block.text.encode()).hexdigest(),
+                    )
+                )
+
+    def blocks(self, note_id) -> list[BlockText]:
+        with self._sessions() as s:
+            rows = s.scalars(
+                select(NoteBlockRow)
+                .where(NoteBlockRow.note_id == note_id)
+                .order_by(NoteBlockRow.position)
+            )
+            return [BlockText(block_id=r.block_id, type=r.block_type, text=r.text) for r in rows]
+
     def set_ignored(self, note_id, ignored) -> None:
         with self._sessions.begin() as s:
             row = s.get(NoteRow, note_id)
@@ -276,6 +304,12 @@ class SqlNoteRepository(NoteRepository):
             row = s.get(NoteRow, note_id)
             if row is not None:
                 row.reviewed_hash = content_hash
+
+    def mark_issues_reviewed(self, note_id, content_hash) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(NoteRow, note_id)
+            if row is not None:
+                row.issues_hash = content_hash
 
     @staticmethod
     def _by_source(s: Session, workspace_id: uuid.UUID, source_id: str) -> NoteRow | None:
@@ -786,6 +820,7 @@ def _issue(row: ReviewIssueRow) -> ReviewIssue:
         last_seen=row.last_seen,
         closed_at=row.closed_at,
         closed_by=row.closed_by,
+        block_id=row.block_id,
     )
 
 
@@ -795,7 +830,7 @@ class SqlIssueRepository(IssueRepository):
 
     def create(
         self, user_id, workspace_id, note_id, note_path, kind, quote, topic, problem, point_id,
-        fingerprint, now,
+        fingerprint, now, block_id=None,
     ) -> ReviewIssue:  # fmt: skip
         with self._sessions.begin() as s:
             row = ReviewIssueRow(
@@ -812,6 +847,7 @@ class SqlIssueRepository(IssueRepository):
                 fingerprint=fingerprint,
                 first_seen=now,
                 last_seen=now,
+                block_id=block_id,
             )
             s.add(row)
             s.flush()
@@ -844,6 +880,12 @@ class SqlIssueRepository(IssueRepository):
             if kinds:
                 query = query.where(ReviewIssueRow.kind.in_([k.value for k in kinds]))
             return [_issue(r) for r in s.scalars(query.order_by(ReviewIssueRow.first_seen))]
+
+    def set_block(self, issue_id, block_id) -> None:
+        with self._sessions.begin() as s:
+            row = s.get(ReviewIssueRow, issue_id)
+            if row is not None:
+                row.block_id = block_id
 
     def seen(self, issue_ids, now) -> None:
         if not issue_ids:

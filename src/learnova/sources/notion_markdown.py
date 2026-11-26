@@ -9,12 +9,18 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
-from learnova.models import ImageRef
+from learnova.models import BlockText, ImageRef
 
 Block = dict[str, Any]
 ChildrenFn = Callable[[str], list[Block]]
 
 LIST_TYPES = {"bulleted_list_item", "numbered_list_item", "to_do"}
+# Blocks whose text is recorded for linking issues to them (table rows are added separately).
+TEXT_BLOCK_TYPES = {
+    "paragraph", "bulleted_list_item", "numbered_list_item", "to_do", "toggle", "quote",
+    "callout", "code", "heading_1", "heading_2", "heading_3", "heading_4", "heading_5",
+    "heading_6",
+}  # fmt: skip
 PLACEHOLDER_TYPES = {"image", "file", "pdf", "video", "audio", "child_database"}
 SKIPPED_TYPES = {"table_of_contents", "breadcrumb"}
 HEADING_TYPES = {f"heading_{n}" for n in range(1, 7)}  # Notion has heading_1 to heading_4
@@ -73,6 +79,7 @@ class MarkdownConverter:
         self._children = children
         self.block_types = block_types if block_types is not None else Counter()
         self.images: list[ImageRef] = []
+        self.blocks: list[BlockText] = []  # plain text of each text block, in reading order
 
     def page(self, page_id: str) -> str:
         return self._render_all(self._children(page_id)).strip() + "\n"
@@ -99,6 +106,10 @@ class MarkdownConverter:
         self.block_types[btype] += 1
         data = block.get(btype, {})
         text = rich_text(data.get("rich_text", []))
+        if btype in TEXT_BLOCK_TYPES:
+            plain = "".join(t.get("plain_text", "") for t in data.get("rich_text", []))
+            if plain.strip():
+                self.blocks.append(BlockText(block_id=block["id"], type=btype, text=plain))
 
         if btype == "paragraph":
             kids = self._kids(block)
@@ -142,6 +153,12 @@ class MarkdownConverter:
             lines = []
             for i, row in enumerate(rows):
                 self.block_types["table_row"] += 1
+                plain = " | ".join(
+                    "".join(t.get("plain_text", "") for t in cell)
+                    for cell in row["table_row"]["cells"]
+                )
+                if plain.strip(" |"):
+                    self.blocks.append(BlockText(block_id=row["id"], type="table_row", text=plain))
                 lines.append("| " + " | ".join(_cell(c) for c in row["table_row"]["cells"]) + " |")
                 if i == 0:  # Markdown tables always need a header row
                     lines.append("|" + " --- |" * len(row["table_row"]["cells"]))

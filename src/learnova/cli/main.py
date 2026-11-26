@@ -192,6 +192,12 @@ def review(
         f"{fixed} fixed · {outcome.open_issues} open"
         + (f" · {dups} possible duplicate(s)" if dups else "")
     )
+    kept = sum(1 for r in run.reviewed if r.issues_kept)
+    if kept:
+        typer.echo(
+            f"{kept} note(s) unchanged since their last issue review: their issues were left "
+            "as they were. Edit a note to have its issues checked again."
+        )
     if run.failed:
         typer.secho(
             f"{len(run.failed)} note(s) failed and will be retried.", fg=typer.colors.YELLOW

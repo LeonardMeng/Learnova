@@ -211,7 +211,9 @@ issues unless `--status` is `fixed`, `dismissed`, `obsolete` or `all`. The weigh
 `[issues]` in `config.toml` (`factual_error = 3`, `unclear = 2`, `missing = 1`).
 
 Issues are kept between reviews: re-reviewing a changed note closes the issues it no longer has
-and doesn't raise the same issue twice. Change one by hand with its id (first 8+ characters):
+and doesn't raise the same issue twice, even when the model words or quotes it a little
+differently. A note whose text hasn't changed keeps its issues as they are, even with
+`review --all`. Change one by hand with its id (first 8+ characters):
 
 ```bash
 learnova issues
@@ -220,8 +222,14 @@ learnova issues dismiss 3fa9c1d2   # not a problem: reviews won't raise it again
 learnova issues reopen 3fa9c1d2
 ```
 
+Each issue links to the paragraph it quotes in Notion: the id in `learnova issues` is a link
+(in terminals that support links, such as iTerm2 or VS Code's), and reports have an
+"Open in Notion" link. Issues without a matching paragraph (and missing topics) link to the page.
+How closely a quote must match a paragraph is `anchor_threshold` under `[issues]` (default 0.6).
+
 Issues of a deleted note become `obsolete`; issues of an ignored note are hidden with it. After
-upgrading to this version, run `learnova review --all` once so issues from earlier reviews are
+upgrading to this version, run `learnova sync --full` (to record each note's paragraphs for the
+links) and then `learnova review --all` once so issues from earlier reviews are
 recorded (until then they exist only in old report files).
 
 ### `learnova kp list [--workspace NAME]`

@@ -96,6 +96,8 @@ class NoteRow(Base):
     content_hash: Mapped[str] = mapped_column(String(64))  # sha256 of the Markdown body
     synced_at: Mapped[datetime] = mapped_column(UTCDateTime)
     reviewed_hash: Mapped[str | None] = mapped_column(String(64))  # content_hash at last review
+    # content_hash when the review last updated this note's issues; unchanged text keeps them as is.
+    issues_hash: Mapped[str | None] = mapped_column(String(64))
     # Hidden by .learnovaignore: kept with its links, but left out of review, quiz and status.
     ignored: Mapped[bool] = mapped_column(default=False, server_default=false())
 
@@ -261,3 +263,20 @@ class ReviewIssueRow(Base):
     last_seen: Mapped[datetime] = mapped_column(UTCDateTime)
     closed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     closed_by: Mapped[str | None] = mapped_column(String(16))
+    block_id: Mapped[str | None] = mapped_column(String(64))  # Notion block of the quote
+
+
+class NoteBlockRow(Base):
+    """The plain text of each text block of a note, replaced whenever the note is downloaded."""
+
+    __tablename__ = "note_blocks"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    note_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("notes.id", ondelete="CASCADE"), index=True
+    )
+    block_id: Mapped[str] = mapped_column(String(64))
+    position: Mapped[int] = mapped_column(Integer)  # reading order within the note
+    block_type: Mapped[str] = mapped_column(String(32))
+    text: Mapped[str] = mapped_column(Text)
+    text_hash: Mapped[str] = mapped_column(String(64))

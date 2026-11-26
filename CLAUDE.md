@@ -39,7 +39,7 @@ Version 2.1:
 
 Version 2.2 (see "Version 2.2" in docs/SPEC.md):
 - [x] Milestone 1: Issues in the database, and a new report
-- [ ] Milestone 2: Block anchors
+- [x] Milestone 2: Block anchors
 - [ ] Milestone 3: Knowledge hierarchy
 - [ ] Milestone 4: Knowledge base as the first page; Issues page
 - [ ] Milestone 5: Quiz on chosen points or a topic

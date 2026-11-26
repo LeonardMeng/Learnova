@@ -302,6 +302,7 @@ def sync_workspace(
             workspace, note, content.images, source, images, image_errors
         )
         images_downloaded += count
+        notes.replace_blocks(note.id, list(content.blocks))
         write_cache_file(workspace, summary, content.markdown, note_images)
 
         if previous is None:

@@ -159,7 +159,9 @@ class NotionSource(NoteSource):
     def fetch(self, note_id: str) -> NoteContent:
         converter = MarkdownConverter(self._children, self.block_types)
         markdown = converter.page(note_id)
-        return NoteContent(markdown=markdown, images=tuple(converter.images))
+        return NoteContent(
+            markdown=markdown, images=tuple(converter.images), blocks=tuple(converter.blocks)
+        )
 
     def read_image(self, ref: ImageRef) -> bytes:
         response = httpx.get(ref.url, follow_redirects=True, timeout=60)

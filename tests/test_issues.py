@@ -1,7 +1,6 @@
 """Review issues: priority, their lifecycle across reviews (new, still present, fixed, dismissed,
 obsolete, hidden), links to knowledge points, `kp merge`, the report and `learnova issues`."""
 
-
 import pytest
 from test_ignore_sync import Source as IgnoringSource
 from test_review import LONG, REDIS, T1, Deduper, Script, resync, workspace
@@ -9,7 +8,7 @@ from typer.testing import CliRunner
 
 from learnova.config import load_settings
 from learnova.home import ensure_home
-from learnova.models import IssueKind, IssueStatus
+from learnova.models import IssueKind, IssueStatus, ReviewIssue
 from learnova.scheduler.priority import IssueWeights, priority
 from learnova.services import issues as issues_service
 from learnova.services import knowledge
@@ -86,7 +85,7 @@ def test_fingerprint_ignores_spacing_case_and_punctuation():
 
 
 def test_new_issues_link_to_points_and_are_not_repeated(repos, tmp_path):
-    ws, _ = workspace(repos, tmp_path, "w", {REDIS: ("Redis", T1, LONG)})
+    ws, source = workspace(repos, tmp_path, "w", {REDIS: ("Redis", T1, LONG)})
     first = Script(
         Redis=lambda r: reply(
             new=[("Persistence", 5)],
@@ -100,8 +99,9 @@ def test_new_issues_link_to_points_and_are_not_repeated(repos, tmp_path):
     assert created[0].point_id == run.reviewed[0].outcomes[0].point.id  # N1 = the new point
     assert created[1].point_id is None and created[2].topic == "Replication"
 
-    # Second review of the unchanged note: the model says still present and re-raises one of
+    # Second review after an unrelated edit: the model says still present and re-raises one of
     # them in other words; nothing new is created.
+    resync(repos, ws, source, REDIS, LONG + "Unrelated line.\n")
     requests = []
 
     def second(req):
@@ -146,18 +146,20 @@ def test_fixed_issues_close_and_show_in_the_report(repos, tmp_path):
 
 
 def test_unmentioned_open_issues_stay_open(repos, tmp_path):
-    ws, _ = workspace(repos, tmp_path, "w", {REDIS: ("Redis", T1, LONG)})
+    ws, source = workspace(repos, tmp_path, "w", {REDIS: ("Redis", T1, LONG)})
     run_review(repos, ws, Script(Redis=lambda r: reply(issues=[ERROR])))
+    resync(repos, ws, source, REDIS, LONG + "Unrelated line.\n")
     run = run_review(repos, ws, Script(Redis=lambda r: reply()))
     assert run.reviewed[0].warnings == ["1 open issue(s) not mentioned; kept open."]
     assert len(open_issues(repos, ws)) == 1
 
 
 def test_dismissed_issues_are_not_raised_again(repos, tmp_path):
-    ws, _ = workspace(repos, tmp_path, "w", {REDIS: ("Redis", T1, LONG)})
+    ws, source = workspace(repos, tmp_path, "w", {REDIS: ("Redis", T1, LONG)})
     run_review(repos, ws, Script(Redis=lambda r: reply(issues=[UNCLEAR], missing=[MISSING])))
     for issue in open_issues(repos, ws):
         issues_service.change_status(repos, str(issue.id), "dismiss", T1)
+    resync(repos, ws, source, REDIS, LONG + "Unrelated line.\n")
 
     requests = []
 
@@ -264,3 +266,105 @@ def test_report_lists_other_open_issues_by_note(repos, tmp_path):
     assert fix_first.count("**Unclear**") == 5
     other = text.split("## Other open issues")[1]
     assert other.startswith("\n\n### Interview / Redis") and other.count("**Unclear**") == 2
+
+
+# --- the same issue, reworded ----------------------------------------------------------------
+
+# Real cases from a review: the model quoted a shorter piece of an already open issue's passage.
+TTL_QUOTE = "I’d use longer TTLs, or sliding expiration for user data."
+STATS_QUOTE = (
+    "check `evicted_keys` and `expired_keys` in `INFO stats`, and track hit rates per key prefix"
+)
+
+
+def old(kind, quote="", topic="", block_id=None):
+    import uuid
+
+    return ReviewIssue(
+        id=uuid.uuid4(), user_id=uuid.uuid4(), workspace_id=uuid.uuid4(), note_id=None,
+        note_path=("Interview", "Redis"), kind=kind, quote=quote, topic=topic, problem="p",
+        point_id=None, status=IssueStatus.OPEN,
+        fingerprint=issues_service.fingerprint(kind, quote, topic), first_seen=T1, last_seen=T1,
+        closed_at=None, closed_by=None, block_id=block_id,
+    )  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("kind", "quote", "topic", "block", "existing", "same"),
+    [
+        ("unclear", "sliding expiration for user data", "", None, old("unclear", TTL_QUOTE), True),
+        ("unclear", "track hit rates per key prefix", "", None, old("unclear", STATS_QUOTE), True),
+        ("unclear", TTL_QUOTE, "", None, old("unclear", "sliding expiration for user data"), True),
+        ("unclear", "I'd use longer TTL, or sliding expiry for user data", "", None,
+         old("unclear", TTL_QUOTE), True),  # 80% alike
+        ("factual_error", "sliding expiration for user data", "", None,
+         old("unclear", TTL_QUOTE), False),  # another kind
+        ("unclear", "user data", "", None, old("unclear", TTL_QUOTE), False),  # too short
+        ("unclear", "passage 1", "", None, old("unclear", "passage 2"), False),
+        ("unclear", "RDB takes snapshots of the dataset", "", None,
+         old("unclear", TTL_QUOTE), False),
+        ("unclear", "RDB takes snapshots", "", "b1", old("unclear", TTL_QUOTE, block_id="b1"),
+         True),  # same block
+        ("unclear", "RDB takes snapshots", "", None, old("unclear", TTL_QUOTE), False),
+        ("missing", "", "Redis Sentinel", None, old("missing", topic="Replication"), False),
+        ("missing", "", "Key expiration (TTLs)", None,
+         old("missing", topic="Key expiration (TTL)"), True),
+    ],
+)  # fmt: skip
+def test_is_same_issue(kind, quote, topic, block, existing, same):
+    assert issues_service.is_same_issue(kind, quote, topic, block, existing) is same
+
+
+def test_reworded_issue_is_not_raised_again(repos, tmp_path):
+    ws, source = workspace(repos, tmp_path, "w", {REDIS: ("Redis", T1, LONG)})
+    ttl = Issue(kind="unclear", quote=TTL_QUOTE, problem="Stale data?")
+    run_review(repos, ws, Script(Redis=lambda r: reply(issues=[ttl])))
+    [first] = open_issues(repos, ws)
+    resync(repos, ws, source, REDIS, LONG + "Unrelated line.\n")
+
+    # Once more, quoting part of the passage, and twice within this run in different words.
+    again = [
+        Issue(kind="unclear", quote="sliding expiration for user data", problem="Stale?"),
+        Issue(kind="unclear", quote="RDB snapshots run on a timer", problem="Which timer?"),
+        Issue(kind="unclear", quote="RDB snapshots run on a timer only", problem="Again."),
+    ]
+    run = run_review(repos, ws, Script(Redis=lambda r: reply(issues=again)), everything=False)
+    assert [i.quote for i in run.reviewed[0].new_issues] == ["RDB snapshots run on a timer"]
+    assert repos.issues.get(first.id).last_seen > first.last_seen  # seen again
+
+
+# --- unchanged notes keep their issues -------------------------------------------------------
+
+
+def test_unchanged_note_keeps_its_issues_until_it_changes(repos, tmp_path):
+    ws, source = workspace(repos, tmp_path, "w", {REDIS: ("Redis", T1, LONG)})
+    run = run_review(repos, ws, Script(Redis=lambda r: reply(issues=[ERROR, UNCLEAR])))
+    assert not run.reviewed[0].issues_kept  # never reviewed for issues: full update
+    before = {i.id: i for i in open_issues(repos, ws)}
+
+    # `review --all` on the unchanged note: the model claims a fix and finds something new, but
+    # the text is the same, so the issues stay exactly as they were.
+    def noisy(req):
+        return reply(
+            status=[("I1", "fixed")], issues=[Issue(kind="unclear", quote="New", problem="?")]
+        )
+
+    run = run_review(repos, ws, Script(Redis=noisy))
+    result = run.reviewed[0]
+    assert result.issues_kept and result.new_issues == [] and result.fixed_issues == []
+    assert result.warnings == [] and len(result.still_open) == 2
+    assert {i.id: i for i in open_issues(repos, ws)} == before  # last_seen untouched too
+
+    from learnova.report import render_review
+
+    user = repos.users.get_or_create_local()
+    ranked = issues_service.ranked(repos, IssueWeights(), ws.id)
+    text = render_review(run, "m", repos.knowledge.list_for_user(user.id), ranked, T1)
+    assert "Issues left as they were for 1 note(s) unchanged" in text
+
+    # After an edit the same reply takes effect.
+    resync(repos, ws, source, REDIS, LONG + "Redis keeps its data in memory.\n")
+    run = run_review(repos, ws, Script(Redis=noisy), everything=False)
+    result = run.reviewed[0]
+    assert not result.issues_kept and len(result.fixed_issues) == 1
+    assert [i.quote for i in result.new_issues] == ["New"]

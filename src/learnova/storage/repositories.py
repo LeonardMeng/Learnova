@@ -11,6 +11,7 @@ from pathlib import Path
 
 from learnova.models import (
     Attempt,
+    BlockText,
     ImageRef,
     IssuedQuestion,
     IssueKind,
@@ -105,7 +106,19 @@ class NoteRepository(ABC):
     def mark_reviewed(self, note_id: uuid.UUID, content_hash: str) -> None: ...
 
     @abstractmethod
+    def mark_issues_reviewed(self, note_id: uuid.UUID, content_hash: str) -> None:
+        """Record that the note's issues were updated for this version of its text."""
+
+    @abstractmethod
     def set_ignored(self, note_id: uuid.UUID, ignored: bool) -> None: ...
+
+    @abstractmethod
+    def replace_blocks(self, note_id: uuid.UUID, blocks: list[BlockText]) -> None:
+        """Store the note's text blocks (in reading order), replacing the previous ones."""
+
+    @abstractmethod
+    def blocks(self, note_id: uuid.UUID) -> list[BlockText]:
+        """The note's text blocks in reading order."""
 
 
 class ImageRepository(ABC):
@@ -306,6 +319,7 @@ class IssueRepository(ABC):
         point_id: uuid.UUID | None,
         fingerprint: str,
         now: datetime,
+        block_id: str | None = None,
     ) -> ReviewIssue: ...
 
     @abstractmethod
@@ -325,6 +339,9 @@ class IssueRepository(ABC):
         kinds: list[IssueKind] | None = None,
     ) -> list[ReviewIssue]:
         """Issues of notes hidden by .learnovaignore are left out."""
+
+    @abstractmethod
+    def set_block(self, issue_id: uuid.UUID, block_id: str | None) -> None: ...
 
     @abstractmethod
     def seen(self, issue_ids: list[uuid.UUID], now: datetime) -> None:

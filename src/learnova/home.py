@@ -50,6 +50,8 @@ DEFAULT_CONFIG = """\
 # factual_error = 3
 # unclear = 2
 # missing = 1
+# How similar (0–1) an issue's quote must be to a paragraph to link the issue to it in Notion.
+# anchor_threshold = 0.6
 
 [api]
 # Browser origins allowed to call `learnova serve` (it only listens on 127.0.0.1).

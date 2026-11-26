@@ -317,7 +317,7 @@ Done when: clicking an issue link opens Notion at the quoted paragraph for the u
 
 ### 3. Knowledge hierarchy
 
-- **Table `kp_parents`** (migration 0014): child, parent, is_primary. Every point has at most one
+- **Table `kp_parents`** (migration 0015): child, parent, is_primary. Every point has at most one
   primary parent (where it "lives"; points without one are at the top level) and at most 2
   secondary parents ("shortcuts"). No cycles; depth at most 4. The code enforces all of this.
 - **Topics.** A point with children is a topic. A topic's mastery is not stored: it is the

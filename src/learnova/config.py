@@ -6,6 +6,7 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field
 
+from learnova.anchors import DEFAULT_THRESHOLD
 from learnova.home import ensure_home
 from learnova.scheduler.mastery import DEFAULT_TYPE_WEIGHTS, MasteryConfig
 from learnova.scheduler.priority import IssueWeights
@@ -42,6 +43,8 @@ class Settings:
     mastery: MasteryConfig = field(default_factory=MasteryConfig)
     api: ApiSettings = field(default_factory=ApiSettings)
     issues: IssueWeights = field(default_factory=IssueWeights)
+    # How similar a quote must be to a block to link the issue there (0–1); see anchors.py.
+    anchor_threshold: float = DEFAULT_THRESHOLD
     import_web: ImportWebSettings = field(default_factory=ImportWebSettings)
 
 
@@ -72,6 +75,7 @@ def load_settings() -> Settings:
         api=ApiSettings(
             allowed_origins=tuple(data.get("api", {}).get("allowed_origins", DEFAULT_ORIGINS))
         ),
+        anchor_threshold=_threshold(data.get("issues", {}).get("anchor_threshold")),
         issues=IssueWeights(
             **{
                 k: float(v)
@@ -87,3 +91,12 @@ def load_settings() -> Settings:
             )
         ),
     )
+
+
+def _threshold(value) -> float:
+    if value is None:
+        return DEFAULT_THRESHOLD
+    value = float(value)
+    if not 0 < value <= 1:
+        raise ValueError(f"[issues] anchor_threshold must be between 0 and 1, got {value}")
+    return value
