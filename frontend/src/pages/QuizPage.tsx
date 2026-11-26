@@ -1,7 +1,7 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
-import { api, ApiError, type QuizKind } from "../api/client";
+import { Link, useSearchParams } from "react-router";
+import { api, ApiError, type QuizKind, type QuizScope } from "../api/client";
 import { ErrorBox, MasteryBar, ScoreBadge, Spinner, WorkspacePicker } from "../components/ui";
 import { loadSession, newSession, saveSession, type Session } from "../quiz/session";
 import { useWorkspace } from "../workspace";
@@ -29,8 +29,8 @@ export function QuizPage() {
     setBusy("question");
     setError(null);
     try {
-      const q = await api.issueQuestion(s.kind, s.workspace, s.asked);
-      setSession({ ...s, current: q, result: null, asked: [...s.asked, q.point_id] });
+      const q = await api.issueQuestion(s.kind, s.workspace, s.asked, s.scope);
+      setSession({ ...s, current: q, result: null, asked: [...s.asked, q.point_id], scopeLabel: q.scope ?? s.scopeLabel ?? null });
     } catch (e) {
       if (e instanceof ApiError && e.code === "NoPointsLeft") {
         setSession({ ...s, current: null, finished: true, endMessage: e.message });
@@ -96,6 +96,7 @@ export function QuizPage() {
           End quiz
         </button>
       </div>
+      {session.scopeLabel && <p className="scope">Only: {session.scopeLabel}</p>}
       {session.current?.source && <p className="muted">from {session.current.source}</p>}
       {error != null && <ErrorBox error={error} onRetry={session.current ? undefined : () => fetchQuestion(session)} />}
       {busy === "question" && <Spinner label="Writing a question…" />}
@@ -113,7 +114,31 @@ export function QuizPage() {
   );
 }
 
+/** `?topic=<id>` or `?points=<id>,<id>` limits the quiz (set by Practice buttons on Knowledge). */
+function useScope(): QuizScope | undefined {
+  const [params] = useSearchParams();
+  const topic = params.get("topic");
+  const points = (params.get("points") ?? "").split(",").filter(Boolean);
+  if (!topic && !points.length) return undefined;
+  return { topic, points };
+}
+
+function ScopeLine({ scope }: { scope: QuizScope }) {
+  const tree = useQuery({ queryKey: ["tree", null], queryFn: () => api.tree(null) });
+  const name = (id: string) => tree.data?.find((p) => p.id === id)?.name ?? "…";
+  const parts = [
+    ...(scope.topic ? [`topic ${name(scope.topic)}`] : []),
+    ...(scope.points ?? []).map(name),
+  ];
+  return (
+    <p className="scope">
+      Only: {parts.join(", ")} · <Link to="/quiz">Practice everything instead</Link>
+    </p>
+  );
+}
+
 function StartForm({ workspace, onStart }: { workspace: string | null; onStart: (s: Session) => void }) {
+  const scope = useScope();
   const [kind, setKind] = useState<QuizKind>("short");
   const [count, setCount] = useState("5"); // the text as typed; checked when starting
   const n = Math.min(50, Math.max(1, Math.floor(Number(count)) || 0));
@@ -121,8 +146,9 @@ function StartForm({ workspace, onStart }: { workspace: string | null; onStart: 
     <section className="card start">
       <div className="page-head">
         <h1>Quiz</h1>
-        <WorkspacePicker />
+        {!scope && <WorkspacePicker />}
       </div>
+      {scope && <ScopeLine scope={scope} />}
       <fieldset>
         <legend>Question type</legend>
         {KINDS.map((k) => (
@@ -138,8 +164,12 @@ function StartForm({ workspace, onStart }: { workspace: string | null; onStart: 
         Questions
         <input type="number" min={1} max={50} value={count} onChange={(e) => setCount(e.target.value)} />
       </label>
-      <p className="muted">From: {workspace ?? "all workspaces"} (change it in the header)</p>
-      <button disabled={!n} onClick={() => onStart(newSession(kind, n, workspace))}>
+      {scope ? (
+        <p className="muted">If there are fewer points than questions, points are asked again.</p>
+      ) : (
+        <p className="muted">From: {workspace ?? "all workspaces"}</p>
+      )}
+      <button disabled={!n} onClick={() => onStart(newSession(kind, n, workspace, scope))}>
         Start quiz
       </button>
     </section>

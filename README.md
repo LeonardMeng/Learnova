@@ -169,7 +169,7 @@ learnova review
 learnova review --all
 ```
 
-### `learnova quiz [--count N] [--workspace NAME] [--type short|mc|tf]`
+### `learnova quiz [--count N] [--workspace NAME | --point POINT … | --topic TOPIC] [--type short|mc|tf]`
 
 Asks N questions (default 5) on knowledge points drawn by weight: important, weakly mastered and
 long-unquizzed points come up most, mastered ones now and then. Draws from all workspaces unless
@@ -186,10 +186,18 @@ point's mastery.
 
 Type `s` to skip a question or `q` to stop.
 
+`--point` (repeatable) and `--topic` limit the quiz to those points; a topic stands for every
+point under it, shortcuts included (topics themselves aren't asked). Points are still drawn by
+weight, and when there are fewer points than questions they are asked again (never the same one
+twice in a row if there is another). They can't be combined with `--workspace`. In the web app,
+tick points in the Knowledge tree and press "Practice selected", or use "Practice this topic".
+
 ```bash
 learnova quiz
 learnova quiz --count 10 --workspace interview
 learnova quiz --type mc
+learnova quiz --topic "Redis persistence" -n 8
+learnova quiz --point "RDB snapshots" --point "AOF log"
 ```
 
 ### `learnova status [--workspace NAME] [--weakest N]`

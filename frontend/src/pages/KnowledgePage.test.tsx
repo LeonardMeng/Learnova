@@ -130,3 +130,47 @@ describe("Knowledge page", () => {
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview"]);
   });
 });
+
+describe("Practice chosen points or a topic", () => {
+  const question = (point: string, scope: string) => ({
+    id: `q-${point}`, type: "short", text: "Explain?", options: null, source: "interview: Interview / Redis",
+    point_id: point, status: "open", created_at: "2026-11-25T05:00:00Z", scope,
+  });
+
+  it("starts a quiz on the checked points", async () => {
+    const calls = mockApi(routes({ "POST /api/quiz/questions": () => ({ status: 201, json: question("e", "2 chosen points") }) }));
+    const user = userEvent.setup();
+    renderApp("/");
+    const t = await screen.findByRole("list", { name: "Knowledge tree" });
+    await user.click(within(t).getByRole("checkbox", { name: "Choose Eviction" }));
+    await user.click(within(t).getByRole("checkbox", { name: "Choose Caching" }));
+    await user.click(screen.getByRole("button", { name: "Practice selected (2)" }));
+
+    expect(await screen.findByText(/Only: Eviction, Caching/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Workspace")).toBeNull(); // a selection has no workspace
+    await user.click(screen.getByRole("button", { name: "Start quiz" }));
+    expect(await screen.findByText("Only: 2 chosen points")).toBeInTheDocument();
+    const post = calls.find((c) => c.method === "POST")!;
+    expect(post.body).toMatchObject({ points: ["e", "c"], topic: null, workspace: null, exclude: [] });
+  });
+
+  it("practises a topic from the detail panel, and can go back to everything", async () => {
+    const calls = mockApi(routes({ "POST /api/quiz/questions": () => ({ status: 201, json: question("e", "topic Redis (1 point(s))") }) }));
+    const user = userEvent.setup();
+    renderApp("/?point=r");
+    const panel = await screen.findByRole("article", { name: "Details of Redis" });
+    await user.click(within(panel).getByRole("button", { name: "Practice this topic" }));
+    expect(await screen.findByText(/Only: topic Redis/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start quiz" }));
+    expect(await screen.findByText("Only: topic Redis (1 point(s))")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ topic: "r", points: [] });
+  });
+
+  it("offers practising everything instead", async () => {
+    mockApi(routes());
+    renderApp("/quiz?topic=r");
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("link", { name: "Practice everything instead" }));
+    expect(await screen.findByLabelText("Workspace")).toBeInTheDocument();
+  });
+});

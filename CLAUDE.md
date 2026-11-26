@@ -42,7 +42,7 @@ Version 2.2 (see "Version 2.2" in docs/SPEC.md):
 - [x] Milestone 2: Block anchors
 - [x] Milestone 3: Knowledge hierarchy
 - [x] Milestone 4: Knowledge base as the first page; Issues page
-- [ ] Milestone 5: Quiz on chosen points or a topic
+- [x] Milestone 5: Quiz on chosen points or a topic
 - [ ] Milestone 6: Issues as Notion comments (optional, off by default)
 
 Version 2.3:

@@ -995,6 +995,7 @@
           "quiz"
         ],
         "summary": "Issue",
+        "description": "With `points` or `topic`, questions come only from those points, and are asked again\nonce all of them have been (pass `exclude` in the order asked). Not with `workspace`.",
         "operationId": "issue_api_quiz_questions_post",
         "requestBody": {
           "content": {
@@ -2095,8 +2096,31 @@
             },
             "type": "array",
             "title": "Exclude",
-            "description": "Points already asked in this session",
+            "description": "Points already asked in this session, in the order asked",
             "default": []
+          },
+          "points": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Points",
+            "description": "Only these points (a topic stands for the points under it)",
+            "default": []
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic",
+            "description": "Only the points under this topic"
           }
         },
         "type": "object",
@@ -2165,6 +2189,17 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
           }
         },
         "type": "object",

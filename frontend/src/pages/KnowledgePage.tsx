@@ -3,9 +3,10 @@
 // sidebar search filters the tree (`?q=`), and the selected point is `?point=`.
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { api, type TreePoint } from "../api/client";
 import { ErrorBox, IssueBadge, MasteryBar, percent, Spinner, Stat, when, WorkspacePicker } from "../components/ui";
+import { scopedQuizUrl } from "../quiz/session";
 import { useWorkspace } from "../workspace";
 import { PointDetailPanel } from "./PointDetail";
 
@@ -21,6 +22,14 @@ export function KnowledgePage() {
     queryFn: () => api.issues({ workspace, status: "open" }),
   });
   const [expanded, setExpanded] = useState<Set<string> | null>(null); // null: top level open
+  const [checked, setChecked] = useState<Set<string>>(new Set()); // points to practice
+  const navigate = useNavigate();
+  const toggleCheck = (id: string) => {
+    const next = new Set(checked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setChecked(next);
+  };
 
   const select = (id: string | null) =>
     setParams((prev) => {
@@ -57,6 +66,14 @@ export function KnowledgePage() {
       )}
       <div className="split">
         <div className="card tree-card">
+          {checked.size > 0 && (
+            <div className="toolbar practice-bar">
+              <button onClick={() => navigate(scopedQuizUrl({ points: [...checked] }))}>
+                Practice selected ({checked.size})
+              </button>
+              <button className="link" onClick={() => setChecked(new Set())}>Clear</button>
+            </div>
+          )}
           {tree.isPending && <Spinner label="Loading…" />}
           {tree.isError && <ErrorBox error={tree.error} onRetry={() => tree.refetch()} />}
           {tree.data?.length === 0 && (
@@ -67,7 +84,8 @@ export function KnowledgePage() {
               <SearchResults rows={rows} byId={byId} q={q} selected={selected} onPick={reveal} />
             ) : (
               <Tree rows={rows} byId={byId} expanded={expanded} setExpanded={setExpanded} selected={selected}
-                    onSelect={select} onJump={reveal} />
+                    onSelect={select} onJump={reveal} checked={checked} onCheck={toggleCheck}
+                    onPractice={(id) => navigate(scopedQuizUrl({ topic: id }))} />
             ))}
         </div>
         <div className="detail-column">
@@ -90,9 +108,12 @@ type TreeProps = {
   selected: string | null;
   onSelect: (id: string) => void;
   onJump: (id: string) => void;
+  checked: Set<string>;
+  onCheck: (id: string) => void;
+  onPractice: (topicId: string) => void;
 };
 
-function Tree({ rows, byId, expanded, setExpanded, selected, onSelect, onJump }: TreeProps) {
+function Tree({ rows, byId, expanded, setExpanded, selected, onSelect, onJump, checked, onCheck, onPractice }: TreeProps) {
   // Children in the API's order (most important first): own points, then shortcuts.
   const kids = useMemo(() => {
     const m = new Map<string | null, { row: TreePoint; shortcut: boolean }[]>();
@@ -136,10 +157,18 @@ function Tree({ rows, byId, expanded, setExpanded, selected, onSelect, onJump }:
             ) : (
               <span className="twisty" />
             )}
+            <input type="checkbox" aria-label={`Choose ${row.name}`} checked={checked.has(row.id)}
+                   onChange={() => onCheck(row.id)} />
             <button className={`link ${row.topic ? "topic-name" : ""}`} onClick={() => onSelect(row.id)}>
               {row.name}
             </button>
             <span className="row-meta">
+              {row.topic && (
+                <button className="link small practice" onClick={() => onPractice(row.id)}
+                        aria-label={`Practice this topic: ${row.name}`}>
+                  practice
+                </button>
+              )}
               {row.topic ? (
                 <span className="muted" title={`${row.topic.quizzed} of ${row.topic.total} quizzed`}>
                   {percent(row.topic.mastery)} · {row.topic.quizzed}/{row.topic.total}

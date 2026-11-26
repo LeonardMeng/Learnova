@@ -3,7 +3,9 @@
 // PATCH /api/points/{id}; a change the rules refuse (a loop, too deep) shows the API's message.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { api, type PointDetail, type PointPatch } from "../api/client";
+import { scopedQuizUrl } from "../quiz/session";
 import { ErrorBox, KIND_LABEL, MasteryBar, percent, ScoreBadge, Sparkline, Spinner, when } from "../components/ui";
 
 export function PointDetailPanel({ id, onSelect, onClose }: {
@@ -29,6 +31,7 @@ function Detail({ point, onSelect, onClose }: { point: PointDetail; onSelect: (i
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });
+  const navigate = useNavigate();
   const [moveTo, setMoveTo] = useState("");
   const [shortcut, setShortcut] = useState("");
   const others = (all.data ?? []).filter((p) => p.id !== point.id);
@@ -43,6 +46,11 @@ function Detail({ point, onSelect, onClose }: { point: PointDetail; onSelect: (i
         <button className="secondary small" onClick={onClose} aria-label="Close details">×</button>
       </div>
       <p>{point.summary}</p>
+      <div className="actions">
+        <button onClick={() => navigate(scopedQuizUrl(point.topic ? { topic: point.id } : { points: [point.id] }))}>
+          {point.topic ? "Practice this topic" : "Practice this point"}
+        </button>
+      </div>
 
       <dl className="facts">
         <dt>Mastery</dt>

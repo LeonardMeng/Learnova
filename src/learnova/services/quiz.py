@@ -174,9 +174,10 @@ def candidates(
     now: datetime,
     config: weights_mod.WeightConfig,
     workspace_name: str | None = None,
+    only: frozenset | set | None = None,
 ) -> list[QuizItem]:
-    """Points that come from at least one note (in that workspace, if named), with weights.
-    Topics (points with other points under them) are not quizzed."""
+    """Points that come from at least one note (in that workspace, if named; among `only`, if
+    given), with weights. Topics (points with other points under them) are not quizzed."""
     user = repos.users.get_or_create_local()
     if workspace_name is not None and workspace_name not in {
         w.name for w in repos.workspaces.list(user.id)
@@ -191,7 +192,7 @@ def candidates(
     topics = {link.parent_id for link in repos.knowledge.parents(user.id)}
     items = []
     for point in repos.knowledge.list_for_user(user.id):
-        if point.id in topics:
+        if point.id in topics or (only is not None and point.id not in only):
             continue
         sources = by_point.get(point.id, [])
         if workspace_name is not None:
@@ -489,15 +490,26 @@ def issue_question(
     config: weights_mod.WeightConfig,
     rng: random.Random,
     workspace_name: str | None = None,
-    exclude: frozenset | set | list = (),
+    exclude: list | tuple = (),
+    selection: Selection | None = None,
 ) -> IssuedQuestion:
-    """Draw one point by weight (skipping `exclude`, the points already asked this session),
-    have the model write a question, and store it until it is answered."""
+    """Draw one point by weight (skipping `exclude`, the points already asked this session, in
+    the order asked), have the model write a question, and store it until it is answered.
+    With a selection, points are drawn only from it, and once every one has been asked they
+    are asked again (never the same point twice in a row, if there is another)."""
     repos.issued.purge_open(now - QUESTION_TTL)
     excluded = set(exclude)
-    items = [
-        i for i in candidates(repos, now, config, workspace_name) if i.point.id not in excluded
-    ]
+    only = selection.points if selection else None
+    pool = candidates(repos, now, config, workspace_name, only)
+    items = [i for i in pool if i.point.id not in excluded]
+    if not items and selection is not None and pool:
+        last = exclude[-1] if exclude else None
+        items = [i for i in pool if i.point.id != last] or pool
+    if not items and selection is not None:
+        raise NoPointsLeft(
+            f"Nothing to ask in {selection.label}: its points come from no note that is synced "
+            "(or are hidden by .learnovaignore)."
+        )
     if not items:
         where = f" in {workspace_name!r}" if workspace_name else ""
         more = " more" if excluded else ""
@@ -516,6 +528,48 @@ def issue_question(
     return repos.issued.create(
         user.id, item.point.id, kind, text, options, hidden, [asdict(n) for n in notes], now
     )
+
+
+@dataclass(frozen=True)
+class Selection:
+    """The points a quiz is limited to (chosen points, or everything under a topic)."""
+
+    points: frozenset
+    label: str  # e.g. "topic Redis (6 points)" or "2 chosen points"
+
+
+def select(
+    repos: Repositories, point_refs: list[str] = (), topic_ref: str | None = None
+) -> Selection:
+    """Resolve names or ids. A topic (given as --topic or as a point) stands for every point
+    under it, shortcuts included; topics themselves are not asked."""
+    from learnova.services import hierarchy, knowledge
+
+    user = repos.users.get_or_create_local()
+    graph = hierarchy.load(repos, user.id)
+
+    def expand(point: KnowledgePoint) -> set:
+        if not graph.is_topic(point.id):
+            return {point.id}
+        return {p for p in graph.descendants(point.id) if not graph.is_topic(p)}
+
+    chosen: set = set()
+    parts = []
+    if topic_ref is not None:
+        topic = knowledge.find_point(repos, topic_ref)
+        under = expand(topic)
+        chosen |= under
+        parts.append(f"topic {topic.name} ({len(under)} point(s))")
+    points = [knowledge.find_point(repos, ref) for ref in point_refs]
+    for p in points:
+        chosen |= expand(p)
+    if len(points) == 1:
+        parts.append(f"{points[0].name}" + (" (a topic)" if graph.is_topic(points[0].id) else ""))
+    elif points:
+        parts.append(f"{len(points)} chosen points")
+    if not parts:
+        raise QuizError("Choose at least one point or a topic.")
+    return Selection(frozenset(chosen), " + ".join(parts))
 
 
 @dataclass(frozen=True)

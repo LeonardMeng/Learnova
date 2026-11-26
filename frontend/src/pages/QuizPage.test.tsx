@@ -52,8 +52,8 @@ describe("Quiz page", () => {
 
     const issued = calls.filter((c) => c.path === "/api/quiz/questions");
     expect(issued.map((c) => c.body)).toEqual([
-      { type: "mc", workspace: "interview", exclude: [] },
-      { type: "mc", workspace: "interview", exclude: ["p1"] },
+      { type: "mc", workspace: "interview", exclude: [], points: [], topic: null },
+      { type: "mc", workspace: "interview", exclude: ["p1"], points: [], topic: null },
     ]);
     expect(calls.find((c) => c.path.endsWith("/answer"))?.body).toEqual({ answer: "B" });
   });

@@ -231,15 +231,27 @@ def quiz(
             "--type", "-t", help="short (graded by the model), mc (multiple choice) or tf."
         ),
     ] = QuizType.short,
+    points: Annotated[
+        list[str] | None,
+        typer.Option("--point", "-p", help="Only this point (name or id); repeat for more."),
+    ] = None,
+    topic: Annotated[
+        str | None,
+        typer.Option("--topic", help="Only the points under this topic (name or id)."),
+    ] = None,
 ) -> None:
     """Answer questions on knowledge points drawn by weight. Short answers are graded by the
-    model; multiple choice and true/false are checked locally."""
+    model; multiple choice and true/false are checked locally. With --point or --topic, only
+    those points are asked (again, if there are fewer than --count)."""
     qtype = QUIZ_KINDS[kind]
     rng = random.Random()
+    if (points or topic) and workspace_name is not None:
+        raise typer.BadParameter("--point / --topic can't be combined with --workspace.")
     with user_errors():
         repos = repositories()
         if workspace_name is not None:
             WorkspaceService(repos).current(name=workspace_name)  # checks the name exists
+        selection = quiz_service.select(repos, points or [], topic) if (points or topic) else None
         settings = load_settings()
         model = factory.main_model(settings.models)
         models = quiz_service.quiz_models(model, qtype, rng)
@@ -248,18 +260,20 @@ def quiz(
         QuizType.mc: "Answer with A, B, C or D.",
         QuizType.tf: "Answer with t (true) or f (false).",
     }[kind]
+    scope = f" on {selection.label}" if selection else ""
     typer.echo(
-        f"Quiz: {count} question(s) · {settings.models.main}\n{how} Type s to skip, q to quit."
+        f"Quiz{scope}: {count} question(s) · {settings.models.main}\n{how} "
+        "Type s to skip, q to quit."
     )
 
-    asked: set = set()
+    asked: list = []
     spaces: set[str] = set()
     results = []  # (point name, score or None, mastery before, mastery after)
     for number in range(1, count + 1):
         try:
             question = quiz_service.issue_question(
                 repos, models, qtype, datetime.now(UTC), settings.weights, rng,
-                workspace_name, asked,
+                workspace_name, asked, selection,
             )  # fmt: skip
         except quiz_service.NoPointsLeft as e:
             typer.echo(f"\n{e}")
@@ -267,7 +281,7 @@ def quiz(
         except (factory.LLMCallError, quiz_service.InvalidQuestion) as e:
             typer.secho(f"\nCouldn't write a question: {e}", fg=typer.colors.YELLOW)
             continue
-        asked.add(question.point_id)
+        asked.append(question.point_id)
         source = question.notes[0]["path"] if question.notes else ""
         spaces.add(source.split(":", 1)[0])
         typer.secho(f"\nQuestion {number}/{count} · {source}", bold=True)

@@ -364,7 +364,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Issue */
+        /**
+         * Issue
+         * @description With `points` or `topic`, questions come only from those points, and are asked again
+         *     once all of them have been (pass `exclude` in the order asked). Not with `workspace`.
+         */
         post: operations["issue_api_quiz_questions_post"];
         delete?: never;
         options?: never;
@@ -759,10 +763,21 @@ export interface components {
             workspace?: string | null;
             /**
              * Exclude
-             * @description Points already asked in this session
+             * @description Points already asked in this session, in the order asked
              * @default []
              */
             exclude: string[];
+            /**
+             * Points
+             * @description Only these points (a topic stands for the points under it)
+             * @default []
+             */
+            points: string[];
+            /**
+             * Topic
+             * @description Only the points under this topic
+             */
+            topic?: string | null;
         };
         /**
          * QuestionOut
@@ -800,6 +815,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Scope */
+            scope?: string | null;
         };
         /** RemovedWorkspaceOut */
         RemovedWorkspaceOut: {

@@ -228,7 +228,13 @@ QuizType = Literal["short", "mc", "tf"]
 class QuestionIn(BaseModel):
     type: QuizType = "short"
     workspace: str | None = None
-    exclude: list[uuid.UUID] = Field(default=[], description="Points already asked in this session")
+    exclude: list[uuid.UUID] = Field(
+        default=[], description="Points already asked in this session, in the order asked"
+    )
+    points: list[uuid.UUID] = Field(
+        default=[], description="Only these points (a topic stands for the points under it)"
+    )
+    topic: uuid.UUID | None = Field(default=None, description="Only the points under this topic")
 
 
 class QuestionOut(BaseModel):
@@ -242,6 +248,7 @@ class QuestionOut(BaseModel):
     point_id: uuid.UUID  # pass back in `exclude` for the next question
     status: Literal["open", "answered", "skipped"]
     created_at: datetime
+    scope: str | None = None  # what the quiz is limited to, e.g. "topic Redis (6 point(s))"
 
 
 class AnswerIn(BaseModel):

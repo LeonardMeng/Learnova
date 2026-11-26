@@ -45,16 +45,27 @@ def _out(q: IssuedQuestion) -> schemas.QuestionOut:
 
 @router.post("/questions", response_model=schemas.QuestionOut, status_code=201)
 def issue(body: schemas.QuestionIn, repos: Repos, settings: Config):
+    """With `points` or `topic`, questions come only from those points, and are asked again
+    once all of them have been (pass `exclude` in the order asked). Not with `workspace`."""
+    chosen = body.points or body.topic is not None
+    if chosen and body.workspace is not None:
+        raise quiz_service.QuizError("Choose points or a topic, or a workspace, not both.")
     if body.workspace is not None:
         workspace_named(repos, body.workspace)
+    selection = None
+    if chosen:
+        topic = str(body.topic) if body.topic else None
+        selection = quiz_service.select(repos, [str(p) for p in body.points], topic)
     kind = TYPES[body.type]
     rng = random.Random()
     models = quiz_service.quiz_models(factory.main_model(settings.models), kind, rng)
     question = quiz_service.issue_question(
         repos, models, kind, datetime.now(UTC), settings.weights, rng, body.workspace,
-        set(body.exclude),
+        list(body.exclude), selection,
     )  # fmt: skip
-    return _out(question)
+    out = _out(question)
+    out.scope = selection.label if selection else None
+    return out
 
 
 @router.get("/questions/{question_id}", response_model=schemas.QuestionOut)

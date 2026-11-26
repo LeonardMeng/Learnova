@@ -23,6 +23,8 @@ export type ReviewResult = S["ReviewOut"];
 export type Question = S["QuestionOut"];
 export type Answer = S["AnswerOut"];
 export type QuizKind = Question["type"];
+/** What a quiz is limited to: chosen points, or every point under a topic. */
+export type QuizScope = { points?: string[]; topic?: string | null };
 
 /** An error answered by the API: `{error, code}`, or FastAPI's validation `detail`. */
 export class ApiError extends Error {
@@ -96,8 +98,10 @@ export const api = {
     request<SyncResult>("POST", `${ws(workspace)}/sync`, { full, describe: true }),
   review: (workspace: string, all: boolean) =>
     request<ReviewResult>("POST", `${ws(workspace)}/review`, { all }),
-  issueQuestion: (type: QuizKind, workspace: string | null, exclude: string[]) =>
-    request<Question>("POST", "/api/quiz/questions", { type, workspace, exclude }),
+  issueQuestion: (type: QuizKind, workspace: string | null, exclude: string[], scope: QuizScope = {}) =>
+    request<Question>("POST", "/api/quiz/questions", {
+      type, workspace, exclude, points: scope.points ?? [], topic: scope.topic ?? null,
+    }),
   answer: (id: string, answer: string) =>
     request<Answer>("POST", `/api/quiz/questions/${id}/answer`, { answer }),
   skip: (id: string) => request<unknown>("POST", `/api/quiz/questions/${id}/skip`, {}),
