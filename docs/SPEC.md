@@ -532,13 +532,14 @@ Done already:
    created if missing) and "Make it the default workspace". Creating it (`POST /api/workspaces`)
    also writes an empty `.learnovaignore` (comments only, nothing left out), as
    `learnova workspace new` does. There is no remove button.
-2. **Sync and review per workspace on the Management page.** The page-wide toolbar ("Sync from
+2. **Sync and review per workspace on the Management page (done 2026-11-26).** The page-wide toolbar ("Sync from
    Notion", "re-download all", "Run review", "all notes") and its workspace picker go away.
    Each row of the workspace table gets its own Sync and Review buttons, with the result shown
    under that workspace. "Re-download all" and "Review all notes" are only needed now and then
    (after upgrading Learnova, after changing the model or prompts, or when a cached note looks
    wrong), so they move to a small "More" menu on each row instead of being removed.
-   "Add new workspace" moves to the table's header.
+   "Add new workspace" moves to the table's header. "More" also holds "Make default". Each row
+   runs on its own, so two workspaces can sync at once; the API is unchanged.
 
 ## Version 3 (not started)
 

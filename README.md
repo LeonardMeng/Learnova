@@ -344,10 +344,12 @@ and the tabs are remembered in the browser.
   (A–D, T/F, Ctrl/⌘+Enter); a reload continues the current question.
 - **Workspaces › History**: coming soon.
 - **Workspaces › Issues**: open issues by priority, with a Notion link, Fix and Dismiss.
-- **Workspaces › Management**: the Sync and Review buttons for a workspace, and **Add new
-  workspace**: paste the Notion page link and press Check (if Notion can't see the page, it says
+- **Workspaces › Management**: every workspace with its own **Sync** and **Review** buttons (the
+  result shows under its row; two workspaces can run at once). **More ▾** on a row has
+  **Re-download all** (fetch every page again, e.g. after upgrading), **Review all notes** (e.g.
+  after changing the model) and **Make default**. **Add new workspace**: paste the Notion page link and press Check (if Notion can't see the page, it says
   how to share it with the integration), then give a name and a folder. The folder gets an
-  empty `.learnovaignore`; then press Sync from Notion. (`/sync` still opens this page.)
+  empty `.learnovaignore`; then press Sync on its row. (`/sync` still opens this page.)
 - **Workspaces › one entry per workspace**: its Notion page tree with the pages' icons; a page
   shows its knowledge points and issues.
 - **Workspaces › Web imports**: the sites imported with `learnova web import`.

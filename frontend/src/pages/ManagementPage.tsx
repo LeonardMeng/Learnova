@@ -1,73 +1,127 @@
-// Workspaces › Management: the workspaces; Sync and Review for one of them; and adding a new
-// workspace (check the Notion page, then create it with an empty .learnovaignore).
+// Workspaces › Management: every workspace with its own Sync and Review buttons (and, under
+// "More", re-download all / review all / make default), and adding a new workspace (check the
+// Notion page, then create it with an empty .learnovaignore).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link } from "react-router";
-import { api, type NotionCheck, type ReviewResult, type SyncResult } from "../api/client";
-import { ErrorBox, Spinner, WorkspacePicker } from "../components/ui";
-import { useWorkspace } from "../workspace";
+import { api, type NotionCheck, type ReviewResult, type SyncResult, type Workspace } from "../api/client";
+import { ErrorBox, Spinner } from "../components/ui";
 
 export function ManagementPage() {
-  const [picked, setPicked] = useWorkspace();
   const workspaces = useQuery({ queryKey: ["workspaces"], queryFn: api.workspaces });
   const [adding, setAdding] = useState(false);
   const [created, setCreated] = useState<string | null>(null);
-  const name = picked ?? workspaces.data?.find((w) => w.is_default)?.name ?? workspaces.data?.[0]?.name ?? null;
 
   if (workspaces.isPending) return <Spinner label="Loading…" />;
   if (workspaces.isError) return <ErrorBox error={workspaces.error} onRetry={() => workspaces.refetch()} />;
-  const onCreated = (ws: string) => {
-    setAdding(false);
-    setCreated(ws);
-    setPicked(ws);
-  };
-  const addButton = (
-    <button className="secondary" aria-expanded={adding} onClick={() => setAdding(!adding)}>
-      Add new workspace
-    </button>
-  );
   return (
     <section>
       <div className="page-head">
-        <h1>Management{name ? `: ${name}` : ""}</h1>
-        {name && <WorkspacePicker allowAll={false} />}
+        <h1>Management</h1>
       </div>
-      {name ? (
-        <Actions key={name} workspace={name} extra={addButton} />
-      ) : (
-        <div className="card toolbar">
-          <span>No workspaces yet.</span>
-          {addButton}
-        </div>
-      )}
-      {adding && <AddWorkspace onCreated={onCreated} onCancel={() => setAdding(false)} />}
-      {created && created === name && (
+      {created && (
         <div className="card notice">
           <strong>Created workspace {created}</strong> with an empty <code>.learnovaignore</code> (no pages left
-          out). Press <em>Sync from Notion</em> to download its notes, then <em>Run review</em>.
+          out). Press <em>Sync</em> on its row to download its notes, then <em>Review</em>.
         </div>
       )}
-      {workspaces.data.length > 0 && (
-        <div className="card">
+      <div className="card">
+        <div className="card-head">
           <h2>Workspaces</h2>
-          <table>
+          <button className="secondary" aria-expanded={adding} onClick={() => setAdding(!adding)}>
+            Add new workspace
+          </button>
+        </div>
+        {adding && (
+          <AddWorkspace
+            onCreated={(name) => {
+              setAdding(false);
+              setCreated(name);
+            }}
+            onCancel={() => setAdding(false)}
+          />
+        )}
+        {workspaces.data.length === 0 ? (
+          <p className="muted">No workspaces yet.</p>
+        ) : (
+          <table className="workspaces">
             <thead><tr><th>Name</th><th>Folder</th><th>Actions</th></tr></thead>
             <tbody>
-              {workspaces.data.map((w) => (
-                <tr key={w.name}>
-                  <td>
-                    <Link to={`/workspaces/${encodeURIComponent(w.name)}`}>{w.name}</Link>
-                    {w.is_default && <span className="muted"> (default)</span>}
-                  </td>
-                  <td className="muted">{w.path}{w.found ? "" : " (not found)"}</td>
-                  <td><Link to={`/management?workspace=${encodeURIComponent(w.name)}`}>sync / review</Link></td>
-                </tr>
-              ))}
+              {workspaces.data.map((w) => <WorkspaceRow key={w.name} workspace={w} />)}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
     </section>
+  );
+}
+
+/** One workspace: Sync and Review, the rarer actions under "More", and the last result below.
+ * Each row runs on its own, so two workspaces can sync at the same time. */
+function WorkspaceRow({ workspace: w }: { workspace: Workspace }) {
+  const queryClient = useQueryClient();
+  const refresh = () => {
+    for (const key of ["reports", "points", "tree", "status", "issues", "notes", "point", "workspaces"]) {
+      queryClient.invalidateQueries({ queryKey: [key] });
+    }
+  };
+  const sync = useMutation({ mutationFn: (full: boolean) => api.sync(w.name, full), onSuccess: refresh });
+  const review = useMutation({ mutationFn: (all: boolean) => api.review(w.name, all), onSuccess: refresh });
+  const makeDefault = useMutation({ mutationFn: () => api.setDefault(w.name), onSuccess: refresh });
+  const [last, setLast] = useState<"sync" | "review" | null>(null);
+  const running = sync.isPending || review.isPending;
+  const closeMenu = (e: React.MouseEvent) => {
+    const menu = e.currentTarget.closest("details");
+    if (menu) menu.open = false;
+  };
+  const run = (what: "sync" | "review", everything: boolean) => {
+    setLast(what);
+    if (what === "sync") sync.mutate(everything);
+    else review.mutate(everything);
+  };
+  const current = last === "sync" ? sync : last === "review" ? review : null;
+  const hasResult = running || current?.isError || current?.data || makeDefault.isError;
+
+  return (
+    <Fragment>
+      <tr aria-label={`Workspace ${w.name}`}>
+        <td>
+          <Link to={`/workspaces/${encodeURIComponent(w.name)}`}>{w.name}</Link>
+          {w.is_default && <span className="muted"> (default)</span>}
+        </td>
+        <td className="muted">{w.path}{w.found ? "" : " (not found)"}</td>
+        <td className="row-actions">
+          <button className="small" disabled={running} onClick={() => run("sync", false)}>Sync</button>
+          <button className="small" disabled={running} onClick={() => run("review", false)}>Review</button>
+          <details className="more">
+            <summary aria-label={`More actions for ${w.name}`}>More ▾</summary>
+            <div className="more-menu">
+              <button className="link" disabled={running} onClick={(e) => { closeMenu(e); run("sync", true); }}>Re-download all</button>
+              <span className="muted small">Fetch every page again, even unchanged ones (after upgrading, or if a note looks wrong).</span>
+              <button className="link" disabled={running} onClick={(e) => { closeMenu(e); run("review", true); }}>Review all notes</button>
+              <span className="muted small">Review unchanged notes too (after changing the model or prompts).</span>
+              {!w.is_default && (
+                <button className="link" disabled={makeDefault.isPending} onClick={(e) => { closeMenu(e); makeDefault.mutate(); }}>
+                  Make default
+                </button>
+              )}
+            </div>
+          </details>
+        </td>
+      </tr>
+      {hasResult && (
+        <tr className="row-result">
+          <td colSpan={3}>
+            {sync.isPending && <Spinner label="Syncing… this can take a minute." />}
+            {review.isPending && <Spinner label="Reviewing… the model reads every changed note." />}
+            {!running && current?.isError && <ErrorBox error={current.error} />}
+            {!running && last === "sync" && sync.data && <SyncSummary result={sync.data} />}
+            {!running && last === "review" && review.data && <ReviewSummary workspace={w.name} result={review.data} />}
+            {makeDefault.isError && <ErrorBox error={makeDefault.error} />}
+          </td>
+        </tr>
+      )}
+    </Fragment>
   );
 }
 
@@ -101,7 +155,7 @@ function AddWorkspace({ onCreated, onCancel }: { onCreated: (name: string) => vo
 
   return (
     <form
-      className="card add-workspace"
+      className="add-workspace"
       aria-label="Add new workspace"
       onSubmit={(e) => {
         e.preventDefault();
@@ -149,41 +203,10 @@ function AddWorkspace({ onCreated, onCancel }: { onCreated: (name: string) => vo
   );
 }
 
-function Actions({ workspace, extra }: { workspace: string; extra?: React.ReactNode }) {
-  const queryClient = useQueryClient();
-  const [fullSync, setFullSync] = useState(false);
-  const [reviewAll, setReviewAll] = useState(false);
-  const refresh = () => {
-    for (const key of ["reports", "points", "tree", "status", "issues", "notes", "point"]) {
-      queryClient.invalidateQueries({ queryKey: [key] });
-    }
-  };
-  const sync = useMutation({ mutationFn: () => api.sync(workspace, fullSync), onSuccess: refresh });
-  const review = useMutation({ mutationFn: () => api.review(workspace, reviewAll), onSuccess: refresh });
-  const running = sync.isPending || review.isPending;
-  return (
-    <>
-      <div className="card toolbar">
-        <button disabled={running} onClick={() => sync.mutate()}>Sync from Notion</button>
-        <label className="check"><input type="checkbox" checked={fullSync} onChange={(e) => setFullSync(e.target.checked)} /> re-download all</label>
-        <button disabled={running} onClick={() => review.mutate()}>Run review</button>
-        <label className="check"><input type="checkbox" checked={reviewAll} onChange={(e) => setReviewAll(e.target.checked)} /> all notes</label>
-        {extra}
-        {sync.isPending && <Spinner label="Syncing… this can take a minute." />}
-        {review.isPending && <Spinner label="Reviewing… the model reads every changed note." />}
-      </div>
-      {sync.isError && <ErrorBox error={sync.error} />}
-      {review.isError && <ErrorBox error={review.error} />}
-      {sync.data && <SyncSummary result={sync.data} />}
-      {review.data && <ReviewSummary workspace={workspace} result={review.data} />}
-    </>
-  );
-}
-
 function SyncSummary({ result }: { result: SyncResult }) {
   const c = result.counts;
   return (
-    <div className="card notice">
+    <div className="notice result">
       <strong>Synced.</strong> {c.added ?? 0} added, {c.changed ?? 0} changed, {c["renamed/moved"] ?? 0} renamed/moved,{" "}
       {c.deleted ?? 0} deleted,{c.ignored ? ` ${c.ignored} ignored,` : ""}
       {c.restored ? ` ${c.restored} restored,` : ""} {c.unchanged ?? 0} unchanged.
@@ -215,10 +238,10 @@ function SyncSummary({ result }: { result: SyncResult }) {
 
 function ReviewSummary({ workspace, result }: { workspace: string; result: ReviewResult }) {
   if (result.nothing_to_review) {
-    return <div className="card notice">Nothing to review: no note changed since its last review. Sync first, or tick “all notes”.</div>;
+    return <div className="notice result">Nothing to review: no note changed since its last review. Sync first, or use More › Review all notes.</div>;
   }
   return (
-    <div className="card notice">
+    <div className="notice result">
       <strong>Reviewed {result.reviewed} note(s).</strong> {result.new_points} new point(s),{" "}
       {result.issues + result.missing_topics} new issue(s), {result.fixed} fixed, {result.open} open
       {result.possible_duplicates > 0 && <>, {result.possible_duplicates} possible duplicate(s)</>}.{" "}

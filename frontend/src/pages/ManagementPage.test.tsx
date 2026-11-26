@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mockApi } from "../test/mockApi";
 import { renderApp } from "../test/render";
 
@@ -15,14 +15,25 @@ describe("Management page", () => {
   it("is in the sidebar as Management, and /sync redirects to it", async () => {
     mockApi({ "GET /api/workspaces": workspaces });
     renderApp("/sync");
-    expect(await screen.findByRole("heading", { name: "Management: interview" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Management" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Management" })).toHaveAttribute("href", "/management");
     expect(screen.queryByText("Sync & review")).toBeNull();
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Management"]);
   });
 
-  it("shows a sync summary with ignored pages", async () => {
-    mockApi({
+  it("has no page-wide toolbar: each workspace row has its own Sync and Review", async () => {
+    mockApi({ "GET /api/workspaces": workspaces });
+    renderApp("/management");
+    const ml = await screen.findByRole("row", { name: "Workspace ml" });
+    expect(screen.queryByRole("button", { name: "Sync from Notion" })).toBeNull();
+    expect(screen.queryByText("re-download all")).toBeNull();
+    expect(screen.queryByLabelText("Workspace")).toBeNull(); // no picker
+    expect(within(ml).getByRole("button", { name: "Sync" })).toBeInTheDocument();
+    expect(within(ml).getByRole("button", { name: "Review" })).toBeInTheDocument();
+  });
+
+  it("syncs one workspace and shows the summary under its row", async () => {
+    const calls = mockApi({
       "GET /api/workspaces": workspaces,
       "POST /api/workspaces/interview/sync": {
         changes: [{ kind: "ignored", path: ["Interview", "Behaviour"], previous_path: null }],
@@ -33,30 +44,104 @@ describe("Management page", () => {
       },
     });
     const user = userEvent.setup();
-    renderApp("/management"); // no workspace chosen: the default one
-    expect(await screen.findByRole("heading", { name: "Management: interview" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Sync from Notion" }));
+    renderApp("/management");
+    const row = await screen.findByRole("row", { name: "Workspace interview" });
+    await user.click(within(row).getByRole("button", { name: "Sync" }));
     expect(await screen.findByText(/1 ignored,/)).toBeInTheDocument();
     expect(screen.getByText("Ignored by .learnovaignore: Behaviour")).toBeInTheDocument();
+    // The result row comes right after the interview row.
+    expect((row.nextElementSibling as HTMLElement).textContent).toContain("Synced.");
+    expect(calls.find((c) => c.method === "POST")).toMatchObject({
+      path: "/api/workspaces/interview/sync", body: { full: false, describe: true },
+    });
   });
 
-  it("runs a review and links to its report", async () => {
+  it("reviews one workspace and links to its report", async () => {
     const calls = mockApi({
       "GET /api/workspaces": workspaces,
-      "POST /api/workspaces/interview/review": {
+      "POST /api/workspaces/ml/review": {
         nothing_to_review: false, reviewed: 1, skipped: 0, failed: [], new_points: 2, issues: 1,
         missing_topics: 0, fixed: 1, open: 3, possible_duplicates: 0, report: "2026-11-25-review-2.md", model: "m",
         pending_images: 0,
       },
     });
     const user = userEvent.setup();
-    renderApp("/management?workspace=interview");
-    await user.click(await screen.findByRole("button", { name: "Run review" }));
+    renderApp("/management");
+    const row = await screen.findByRole("row", { name: "Workspace ml" });
+    await user.click(within(row).getByRole("button", { name: "Review" }));
     expect(await screen.findByText(/Reviewed 1 note/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open the report" })).toHaveAttribute(
-      "href", "/reports?workspace=interview&report=2026-11-25-review-2.md",
+      "href", "/reports?workspace=ml&report=2026-11-25-review-2.md",
     );
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ all: false });
+  });
+
+  it("offers re-download all, review all and make default under More", async () => {
+    const calls = mockApi({
+      "GET /api/workspaces": workspaces,
+      "POST /api/workspaces/ml/sync": {
+        changes: [], counts: { unchanged: 2 }, notes_downloaded: 2, images_downloaded: 0, image_errors: [],
+        block_types: {}, skipped_databases: [], images_described: 0, images_reused: 0, describe_errors: [],
+        pending_images: 0, not_described_because: null, ignored: [],
+      },
+      "POST /api/workspaces/ml/review": { nothing_to_review: true },
+      "PUT /api/workspaces/ml/default": { ...workspaces[0], is_default: true },
+    });
+    const user = userEvent.setup();
+    renderApp("/management");
+    const row = await screen.findByRole("row", { name: "Workspace ml" });
+    await user.click(within(row).getByText("More ▾"));
+    await user.click(within(row).getByRole("button", { name: "Re-download all" }));
+    expect(await screen.findByText(/Synced\./)).toBeInTheDocument();
+    expect(row.querySelector("details")?.open).toBe(false); // the menu closes after a choice
+    await user.click(within(row).getByText("More ▾"));
+    await user.click(within(row).getByRole("button", { name: "Review all notes" }));
+    expect(await screen.findByText(/Nothing to review/)).toBeInTheDocument();
+    await user.click(within(row).getByText("More ▾"));
+    await user.click(within(row).getByRole("button", { name: "Make default" }));
+    const posts = calls.filter((c) => c.method !== "GET");
+    expect(posts.map((c) => [c.method, c.path, c.body])).toEqual([
+      ["POST", "/api/workspaces/ml/sync", { full: true, describe: true }],
+      ["POST", "/api/workspaces/ml/review", { all: true }],
+      ["PUT", "/api/workspaces/ml/default", undefined],
+    ]);
+    // The default workspace has no "Make default".
+    const interview = screen.getByRole("row", { name: "Workspace interview" });
+    await user.click(within(interview).getByText("More ▾"));
+    expect(within(interview).queryByRole("button", { name: "Make default" })).toBeNull();
+  });
+
+  it("runs two workspaces at the same time", async () => {
+    const pending: Record<string, () => void> = {};
+    mockApi({ "GET /api/workspaces": workspaces });
+    const sync = (name: string) =>
+      new Promise<Response>((resolve) => {
+        pending[name] = () => resolve(new Response(JSON.stringify({
+          changes: [], counts: { unchanged: 1 }, notes_downloaded: 0, images_downloaded: 0, image_errors: [],
+          block_types: {}, skipped_databases: [], images_described: 0, images_reused: 0, describe_errors: [],
+          pending_images: 0, not_described_because: null, ignored: [],
+        })));
+      });
+    const base = globalThis.fetch;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      const m = path.match(/\/api\/workspaces\/(\w+)\/sync$/);
+      return m ? sync(m[1]) : base(input, init);
+    });
+    const user = userEvent.setup();
+    renderApp("/management");
+    const ml = await screen.findByRole("row", { name: "Workspace ml" });
+    const interview = screen.getByRole("row", { name: "Workspace interview" });
+    await user.click(within(ml).getByRole("button", { name: "Sync" }));
+    await user.click(within(interview).getByRole("button", { name: "Sync" }));
+    expect(within(ml).getByRole("button", { name: "Sync" })).toBeDisabled();
+    expect(within(interview).getByRole("button", { name: "Sync" })).toBeDisabled();
+    expect(screen.getAllByText("Syncing… this can take a minute.")).toHaveLength(2);
+    pending.ml();
+    await waitFor(() => expect(within(ml).getByRole("button", { name: "Sync" })).toBeEnabled());
+    expect(within(interview).getByRole("button", { name: "Sync" })).toBeDisabled(); // still running
+    pending.interview();
+    await waitFor(() => expect(screen.getAllByText(/Synced\./)).toHaveLength(2));
   });
 
   it("adds a new workspace: check the Notion page, create it, make it the default", async () => {
@@ -79,9 +164,7 @@ describe("Management page", () => {
     });
     const user = userEvent.setup();
     renderApp("/management");
-    // The button sits with Sync and Review.
-    const toolbar = (await screen.findByRole("button", { name: "Sync from Notion" })).closest(".toolbar") as HTMLElement;
-    await user.click(within(toolbar).getByRole("button", { name: "Add new workspace" }));
+    await user.click(await screen.findByRole("button", { name: "Add new workspace" }));
     const form = screen.getByRole("form", { name: "Add new workspace" });
     const create = within(form).getByRole("button", { name: "Create workspace" });
     expect(create).toBeDisabled(); // not checked yet
@@ -104,7 +187,7 @@ describe("Management page", () => {
 
     expect(await screen.findByText(/Created workspace graph-theory/)).toBeInTheDocument();
     expect(screen.getByText(/Created workspace graph-theory/).closest(".notice")).toHaveTextContent(".learnovaignore");
-    expect(await screen.findByRole("heading", { name: "Management: graph-theory" })).toBeInTheDocument();
+    expect(await screen.findByRole("row", { name: "Workspace graph-theory" })).toBeInTheDocument();
     expect(screen.queryByRole("form", { name: "Add new workspace" })).toBeNull();
     const post = calls.find((c) => c.method === "POST" && c.path === "/api/workspaces")!;
     expect(post.body).toEqual({ name: "graph-theory", notion_page: PAGE, path: "~/Notes/graphs" });

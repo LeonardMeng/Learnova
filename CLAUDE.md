@@ -51,7 +51,7 @@ Version 2.3:
 Version 2.4 (NEXT: start here; see "Version 2.4" in docs/SPEC.md, plan one item at a time):
 - [x] Web app polish (2026-11-26)
 - [x] Milestone 1: Management page (was "Sync & review") with an "Add new workspace" button
-- [ ] Milestone 2: Sync and review per workspace on the Management page
+- [x] Milestone 2: Sync and review per workspace on the Management page
 
 Version 3 (not started; see "Version 3" in docs/SPEC.md):
 - [ ] Milestone 1: Bookmark questions

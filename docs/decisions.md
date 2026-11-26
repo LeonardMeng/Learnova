@@ -26,3 +26,4 @@
 - 2026-11-26: V2.2 milestone 6 (issues as Notion comments) dropped: no longer needed. Version 2.2 ends after milestone 5; the next work is Version 2.4.
 - 2026-11-26: The earlier Version 2.4 items (bookmark questions, questions by hand, guided workspace setup) moved to Version 3. The new Version 2.4 keeps the finished web app polish and adds: "Sync & review" renamed Management, with an "Add workspace" workflow in the web app.
 - 2026-11-26: V2.4 M1: "Sync & review" is now Management (`/sync` redirects). "Add new workspace" is a button next to Sync and Review; the folder has no default; a new workspace gets an empty `.learnovaignore` (comments only). Removing a workspace stays on the command line.
+- 2026-11-26: V2.4 M2: Management has no page-wide toolbar or workspace picker; each workspace row has Sync and Review, and a "More" menu with Re-download all, Review all notes and Make default (kept because they are still needed after upgrades or model changes).

@@ -84,3 +84,12 @@ button.small { padding: 3px 10px; }
 .field.wide { max-width: none; }
 .field .row { display: flex; gap: 8px; }
 .field .row input { flex: 1; }
+.add-workspace { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; }
+.row-actions { display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+.more { position: relative; }
+.more summary { cursor: pointer; color: var(--accent); list-style: none; padding: 3px 6px; }
+.more summary::-webkit-details-marker { display: none; }
+.more-menu { position: absolute; right: 0; z-index: 2; width: 300px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; white-space: normal; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); }
+.more-menu .small { margin-bottom: 6px; }
+.row-result td { background: var(--bg); }
+.row-result .notice { border-left: 4px solid var(--accent); padding: 6px 12px; }

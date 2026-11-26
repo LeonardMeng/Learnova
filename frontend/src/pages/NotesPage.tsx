@@ -72,7 +72,7 @@ export function NotesPage() {
     <section>
       <div className="page-head">
         <h1>{name}</h1>
-        <Link to={`/management?workspace=${encodeURIComponent(name)}`}>Management</Link>
+        <Link to="/management">Management</Link>
       </div>
       <div className="split">
         <div className="card tree-card">
